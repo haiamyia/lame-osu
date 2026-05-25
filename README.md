@@ -64,7 +64,7 @@ Plays back `.osr` replay files.
 | Windows 10/11 | x64 only |
 | Visual Studio 2022 | v143 toolset, Desktop development with C++ |
 | osu! stable or osu!lazer | Running on the same machine |
-| OpenTabletDriver | Required for tablet users (absolute pen) |
+| OpenTabletDriver | Required for tablet users |
 
 ## Build
 
