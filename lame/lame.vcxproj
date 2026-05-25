@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{93530793-defa-4a06-9121-c734794ac0f7}</ProjectGuid>
+    <RootNamespace>lame</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)builds\intermediate\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)builds\intermediate\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)impl;$(ProjectDir)impl\deps;$(ProjectDir)impl\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;dwmapi.lib;ntdll.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)impl;$(ProjectDir)impl\deps;$(ProjectDir)impl\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;dwmapi.lib;ntdll.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="core.cxx" />
+    <ClCompile Include="impl\deps\LzmaDec.c" />
+    <ClCompile Include="impl\deps\lzma_helper.cpp" />
+    <ClCompile Include="impl\ImGui\imgui_demo.cpp" />
+    <ClCompile Include="impl\ui\overlay.cpp" />
+    <ClCompile Include="impl\ImGui\imgui.cpp" />
+    <ClCompile Include="impl\ImGui\imgui_draw.cpp" />
+    <ClCompile Include="impl\ImGui\imgui_tables.cpp" />
+    <ClCompile Include="impl\ImGui\imgui_widgets.cpp" />
+    <ClCompile Include="impl\ImGui\imgui_impl_win32.cpp" />
+    <ClCompile Include="impl\ImGui\imgui_impl_dx11.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="core\aim_assist\aimbot.hxx" />
+    <ClInclude Include="core\beatmap\i_beatmap_provider.hxx" />
+    <ClInclude Include="core\beatmap\lazer_index.hxx" />
+    <ClInclude Include="core\beatmap\lazer_memory.hxx" />
+    <ClInclude Include="core\beatmap\lazer_ruleset_reader.hxx" />
+    <ClInclude Include="core\beatmap\songs_resolver.hxx" />
+    <ClInclude Include="core\beatmap\stable_parser.hxx" />
+    <ClInclude Include="core\game\client_factory.hxx" />
+    <ClInclude Include="core\game\i_osu_client.hxx" />
+    <ClInclude Include="core\game\osu_lazer.hxx" />
+    <ClInclude Include="core\game\osu_stable.hxx" />
+    <ClInclude Include="core\relax\relax.hxx" />
+    <ClInclude Include="core\replay\osr_decoder.hxx" />
+    <ClInclude Include="core\replay\replay_bot.hxx" />
+    <ClInclude Include="core\threads\cache.hxx" />
+    <ClInclude Include="impl\defs\offsets_lazer.hxx" />
+    <ClInclude Include="impl\defs\offsets_stable.hxx" />
+    <ClInclude Include="impl\deps\7zTypes.h" />
+    <ClInclude Include="impl\deps\Compiler.h" />
+    <ClInclude Include="impl\deps\LzmaDec.h" />
+    <ClInclude Include="impl\deps\lzma_decode.hxx" />
+    <ClInclude Include="impl\deps\lzma_helper.hpp" />
+    <ClInclude Include="impl\deps\Precomp.h" />
+    <ClInclude Include="impl\ImGui\imconfig.h" />
+    <ClInclude Include="impl\ImGui\imgui.h" />
+    <ClInclude Include="impl\ImGui\imgui_impl_dx11.h" />
+    <ClInclude Include="impl\ImGui\imgui_impl_win32.h" />
+    <ClInclude Include="impl\ImGui\imgui_internal.h" />
+    <ClInclude Include="impl\ImGui\imstb_rectpack.h" />
+    <ClInclude Include="impl\ImGui\imstb_textedit.h" />
+    <ClInclude Include="impl\ImGui\imstb_truetype.h" />
+    <ClInclude Include="impl\includes.hxx" />
+    <ClInclude Include="impl\memory\input.hxx" />
+    <ClInclude Include="impl\input\mouse_hook.hxx" />
+    <ClInclude Include="impl\memory\ntdll.hxx" />
+    <ClInclude Include="impl\memory\win32u.hxx" />
+    <ClInclude Include="impl\memory\process.hxx" />
+    <ClInclude Include="impl\memory\scanner.hxx" />
+    <ClInclude Include="impl\memory\syscall.hxx" />
+    <ClInclude Include="impl\struct\game_snapshot.hxx" />
+    <ClInclude Include="impl\struct\osu_types.hxx" />
+    <ClInclude Include="impl\ui\elements.hxx" />
+    <ClInclude Include="impl\ui\overlay.hxx" />
+    <ClInclude Include="impl\ui\theme.hxx" />
+    <ClInclude Include="impl\util\playfield.hxx" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>
