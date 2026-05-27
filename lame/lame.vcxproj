@@ -90,7 +90,7 @@
     <ClCompile Include="impl\deps\LzmaDec.c" />
     <ClCompile Include="impl\deps\lzma_helper.cpp" />
     <ClCompile Include="impl\ImGui\imgui_demo.cpp" />
-    <ClCompile Include="impl\ui\overlay.cpp" />
+    <ClCompile Include="impl\ui\overlay.cxx" />
     <ClCompile Include="impl\ImGui\imgui.cpp" />
     <ClCompile Include="impl\ImGui\imgui_draw.cpp" />
     <ClCompile Include="impl\ImGui\imgui_tables.cpp" />
@@ -100,6 +100,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\aim_assist\aimbot.hxx" />
+    <ClInclude Include="core\autobot\autobot.hxx" />
     <ClInclude Include="core\beatmap\i_beatmap_provider.hxx" />
     <ClInclude Include="core\beatmap\lazer_index.hxx" />
     <ClInclude Include="core\beatmap\lazer_memory.hxx" />

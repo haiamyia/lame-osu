@@ -19,6 +19,7 @@
 #pragma comment( lib, "dwmapi.lib" )
 #pragma comment( lib, "shell32.lib" )
 #pragma comment( lib, "ole32.lib" )
+#pragma comment( lib, "ws2_32.lib" )
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
 
@@ -36,6 +37,83 @@ namespace {
 
         *out = *adjusted;
         return true;
+    }
+
+    void remove_score_blocker_rule( ) {
+        std::wstring del_cmd = L"cmd.exe /c netsh advfirewall firewall delete rule name=\"lame_score_block\"";
+        STARTUPINFOW si{};
+        si.cb = sizeof( si );
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+        PROCESS_INFORMATION pi{};
+        if ( CreateProcessW( nullptr, const_cast<LPWSTR>( del_cmd.c_str( ) ), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi ) ) {
+            WaitForSingleObject( pi.hProcess, INFINITE );
+            CloseHandle( pi.hProcess );
+            CloseHandle( pi.hThread );
+        }
+    }
+
+    std::vector<std::wstring> resolve_host_ips( const std::wstring& host ) {
+        std::vector<std::wstring> ips;
+        WSADATA wsa_data;
+        if ( WSAStartup( MAKEWORD( 2, 2 ), &wsa_data ) != 0 ) {
+            return ips;
+        }
+
+        ADDRINFOW hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        
+        ADDRINFOW* result = nullptr;
+        if ( GetAddrInfoW( host.c_str( ), nullptr, &hints, &result ) == 0 ) {
+            ADDRINFOW* ptr = result;
+            while ( ptr != nullptr ) {
+                if ( ptr->ai_family == AF_INET ) {
+                    auto* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>( ptr->ai_addr );
+                    wchar_t ip_str[46]{};
+                    if ( InetNtopW( AF_INET, &sockaddr_ipv4->sin_addr, ip_str, 46 ) ) {
+                        if ( std::find( ips.begin( ), ips.end( ), ip_str ) == ips.end( ) ) {
+                            ips.push_back( ip_str );
+                        }
+                    }
+                }
+                ptr = ptr->ai_next;
+            }
+            FreeAddrInfoW( result );
+        }
+        WSACleanup( );
+        return ips;
+    }
+
+    void set_score_blocker_state( bool enabled, HANDLE process_handle ) {
+        remove_score_blocker_rule( );
+
+        if ( enabled && process_handle ) {
+            wchar_t path[MAX_PATH]{};
+            DWORD size = MAX_PATH;
+            if ( QueryFullProcessImageNameW( process_handle, 0, path, &size ) ) {
+                auto ips = resolve_host_ips( L"osu.ppy.sh" );
+                if ( !ips.empty( ) ) {
+                    std::wstring ip_list;
+                    for ( size_t i = 0; i < ips.size( ); ++i ) {
+                        if ( i > 0 ) ip_list += L",";
+                        ip_list += ips[i];
+                    }
+                    
+                    std::wstring add_cmd = L"cmd.exe /c netsh advfirewall firewall add rule name=\"lame_score_block\" dir=out action=block program=\"" + std::wstring( path ) + L"\" remoteip=\"" + ip_list + L"\" enable=yes";
+                    STARTUPINFOW si{};
+                    si.cb = sizeof( si );
+                    si.dwFlags = STARTF_USESHOWWINDOW;
+                    si.wShowWindow = SW_HIDE;
+                    PROCESS_INFORMATION pi{};
+                    if ( CreateProcessW( nullptr, const_cast<LPWSTR>( add_cmd.c_str( ) ), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi ) ) {
+                        WaitForSingleObject( pi.hProcess, INFINITE );
+                        CloseHandle( pi.hProcess );
+                        CloseHandle( pi.hThread );
+                    }
+                }
+            }
+        }
     }
 
 }
@@ -91,7 +169,7 @@ namespace ui {
         ImGui_ImplWin32_Init( m_hwnd );
         ImGui_ImplDX11_Init( m_device, m_context );
 
-        m_mouse_hook.set_filter_injected_only( true );
+        m_mouse_hook.set_filter_injected_only( false );
         m_mouse_hook.set_transform( overlay_tablet_hook_transform, this );
         m_mouse_hook.install( );
 
@@ -100,6 +178,7 @@ namespace ui {
 
     void c_overlay::destroy( ) {
         m_mouse_hook.uninstall( );
+        remove_score_blocker_rule( );
 
         ImGui_ImplDX11_Shutdown( );
         ImGui_ImplWin32_Shutdown( );
@@ -293,6 +372,7 @@ namespace ui {
         }
         m_relax.on_leave_play( mod_game );
         m_replay.on_leave_play( mod_game );
+        m_autobot.on_leave_play( mod_game );
     }
 
     void c_overlay::tick_modules( const osu::full_snapshot_t& snap ) {
@@ -338,6 +418,7 @@ namespace ui {
             m_aim.update( mod_snap.game, mod_snap.beatmap );
             m_relax.update( mod_snap.game, mod_snap.beatmap );
             m_replay.update( mod_snap.game, mod_snap.beatmap );
+            m_autobot.update( mod_snap.game, mod_snap.beatmap );
         }
     }
 
@@ -416,7 +497,7 @@ namespace ui {
         }
 
         {
-            static const char* tab_names[ ] = { "Aimbot", "Relax", "Replay", "System" };
+            static const char* tab_names[ ] = { "Aimbot", "Relax", "Replay", "Autobot", "System" };
             const float tab_start_y = wpos.y + 80.0f;
             const float tab_h = 36.0f;
             const float tab_gap = 10.0f;
@@ -424,7 +505,7 @@ namespace ui {
             const ImVec2 mouse = ImGui::GetIO( ).MousePos;
             const bool mouse_clicked = ImGui::IsMouseClicked( ImGuiMouseButton_Left );
 
-            for ( int i = 0; i < 4; i++ ) {
+            for ( int i = 0; i < 5; i++ ) {
                 const ImVec2 btn_min = ImVec2( wpos.x + 12.0f, tab_start_y + static_cast<float>( i ) * ( tab_h + tab_gap ) );
                 const ImVec2 btn_max = ImVec2( btn_min.x + ( SIDEBAR_W - 24.0f ), btn_min.y + tab_h );
 
@@ -495,14 +576,6 @@ namespace ui {
             ly = ImGui::GetCursorPos( ).y + 4.0f;
 
             ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            checkbox( "Require motion", &m_aim.require_motion );
-            ly = ImGui::GetCursorPos( ).y + 4.0f;
-
-            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            checkbox( "Tablet mode", &m_aim.tablet_mode );
-            ly = ImGui::GetCursorPos( ).y + 4.0f;
-
-            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
             checkbox( "Ignore sliders", &m_aim.ignore_sliders );
             ly = ImGui::GetCursorPos( ).y;
 
@@ -518,15 +591,11 @@ namespace ui {
             dl->ChannelsSetCurrent( 1 );
 
             ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Pull strength", &m_aim.pull_strength, 0.f, 15.f, "", "%.1f" );
+            slider_float( "Strength", &m_aim.strength, 0.f, 20.f, "", "%.1f" );
             ry = ImGui::GetCursorPos( ).y + 3.0f;
 
             ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Close return", &m_aim.return_close, 0.01f, 0.30f, "", "%.2f" );
-            ry = ImGui::GetCursorPos( ).y + 3.0f;
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Far return", &m_aim.return_far, 0.01f, 0.30f, "", "%.2f" );
+            slider_float( "Dead zone", &m_aim.dead_zone, 0.f, 100.f, " %", "%.0f" );
             ry = ImGui::GetCursorPos( ).y + 3.0f;
 
             ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
@@ -534,19 +603,11 @@ namespace ui {
             ry = ImGui::GetCursorPos( ).y + 3.0f;
 
             ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Min hand speed", &m_aim.min_hand_speed, 0.f, 5.f, "px" );
+            slider_float( "Drift decay", &m_aim.drift_decay, 0.01f, 0.50f, "", "%.2f" );
             ry = ImGui::GetCursorPos( ).y + 3.0f;
 
             ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Max aim angle", &m_aim.max_aim_angle, 5.f, 90.f, " deg" );
-            ry = ImGui::GetCursorPos( ).y + 3.0f;
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Blend angle", &m_aim.blend_angle, 0.f, 60.f, " deg" );
-            ry = ImGui::GetCursorPos( ).y + 3.0f;
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Motion curve", &m_aim.motion_curve, 0.f, 1.f, "", "%.2f" );
+            slider_float( "Passive pull", &m_aim.passive_pull, 0.f, 1.f, "", "%.2f" );
             ry = ImGui::GetCursorPos( ).y;
 
             const float rbox_bottom = ry + 10.0f;
@@ -566,19 +627,23 @@ namespace ui {
             ly = ImGui::GetCursorPos( ).y + 4.0f;
 
             ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            slider_float( "Hit bias", &m_relax.timing_mean_ms, -50.f, 20.f, "ms" );
+            slider_float( "Hit window", &m_relax.hit_window_ms, 0.f, 40.f, " ms" );
             ly = ImGui::GetCursorPos( ).y + 4.0f;
 
             ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            slider_float( "Timing stddev", &m_relax.timing_stddev_ms, 2.f, 50.f, "ms" );
+            slider_int( "Manual offset", &m_relax.manual_offset_ms, -100, 100, " ms" );
+            ly = ImGui::GetCursorPos( ).y + 8.0f;
+
+            {
+                bool is_singletap = ( m_relax.tap_style == 1 );
+                ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
+                checkbox( "Singletap mode", &is_singletap );
+                m_relax.tap_style = is_singletap ? 1 : 0;
+            }
             ly = ImGui::GetCursorPos( ).y + 4.0f;
 
             ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            slider_float( "Hold mean", &m_relax.hold_mean_ms, 15.f, 80.f, "ms" );
-            ly = ImGui::GetCursorPos( ).y + 4.0f;
-
-            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            slider_int( "Manual offset", &m_relax.manual_offset_ms, -100, 100, "ms" );
+            slider_int( "Max ST BPM", &m_relax.singletap_bpm_cap, 100, 300, " bpm" );
             ly = ImGui::GetCursorPos( ).y;
 
             const float lbox_bottom = ly + 10.0f;
@@ -592,40 +657,57 @@ namespace ui {
             dl->ChannelsSplit( 2 );
             dl->ChannelsSetCurrent( 1 );
 
+            dl->AddText( S( R_X + 12.0f, ry ), colors::text_bright, "K1 Hold Shape" );
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
+
+            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
+            slider_float( "K1 Center", &m_relax.k1_hold_center, 30.f, 120.f, " ms" );
+            ry = ImGui::GetCursorPos( ).y + 3.0f;
+
+            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
+            slider_float( "K1 Spread", &m_relax.k1_hold_spread, 2.f, 30.f, " ms" );
+            ry = ImGui::GetCursorPos( ).y + 8.0f;
+
+            dl->AddText( S( R_X + 12.0f, ry ), colors::text_bright, "K2 Hold Shape" );
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
+
+            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
+            slider_float( "K2 Center", &m_relax.k2_hold_center, 30.f, 120.f, " ms" );
+            ry = ImGui::GetCursorPos( ).y + 3.0f;
+
+            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
+            slider_float( "K2 Spread", &m_relax.k2_hold_spread, 2.f, 30.f, " ms" );
+            ry = ImGui::GetCursorPos( ).y + 8.0f;
+
+            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
+            slider_float( "Hold floor", &m_relax.hold_floor, 10.f, 60.f, " ms" );
+            ry = ImGui::GetCursorPos( ).y + 3.0f;
+
+            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
+            slider_float( "Hold ceiling", &m_relax.hold_ceiling, 60.f, 150.f, " ms" );
+            ry = ImGui::GetCursorPos( ).y + 8.0f;
+
             if ( m_relax.is_active( ) ) {
                 dl->AddText( S( R_X + 12.0f, ry ), IM_COL32( 100, 255, 100, 255 ), "Status: Running" );
-                ry += ImGui::GetTextLineHeight( ) + 8.0f;
-                char buf[ 64 ];
-                sprintf_s( buf, "Queue size: %zu", m_relax.queue_size( ) );
-                dl->AddText( S( R_X + 12.0f, ry ), colors::text, buf );
-                ry += ImGui::GetTextLineHeight( ) + 8.0f;
             }
             else if ( m_relax.is_synced( ) && m_relax.enabled ) {
-                dl->AddText( S( R_X + 12.0f, ry ), IM_COL32( 255, 200, 100, 255 ), "Status: Synced (waiting)" );
-                ry += ImGui::GetTextLineHeight( ) + 8.0f;
-                char buf[ 64 ];
-                sprintf_s( buf, "Queue size: %zu", m_relax.queue_size( ) );
-                dl->AddText( S( R_X + 12.0f, ry ), colors::text, buf );
-                ry += ImGui::GetTextLineHeight( ) + 8.0f;
+                dl->AddText( S( R_X + 12.0f, ry ), IM_COL32( 255, 200, 100, 255 ), "Status: Synced" );
             }
             else {
-                dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "Status: Disabled / Idle" );
-                ry += ImGui::GetTextLineHeight( ) + 8.0f;
+                dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "Status: Idle" );
             }
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
 
             if ( m_relax.enabled && snap.beatmap.loaded ) {
                 char buf[ 64 ];
                 sprintf_s( buf, "Hit object: %d / %zu", m_relax.last_hit_obj_idx( ), snap.beatmap.objects.size( ) );
-                dl->AddText( S( R_X + 12.0f, ry ), colors::text_bright, buf );
-                ry += ImGui::GetTextLineHeight( );
-            } else {
-                dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "Map: Not loaded" );
+                dl->AddText( S( R_X + 12.0f, ry ), colors::text, buf );
                 ry += ImGui::GetTextLineHeight( );
             }
 
-            const float rbox_bottom = ry + 16.0f;
+            const float rbox_bottom = ry + 10.0f;
             dl->ChannelsSetCurrent( 0 );
-            draw_card( dl, wpos, R_X, rbox_top, rbox_bottom, R_W, "diagnostics", colors::col_hdr );
+            draw_card( dl, wpos, R_X, rbox_top, rbox_bottom, R_W, "hold times & status", colors::col_hdr );
             dl->ChannelsMerge( );
         }
         else if ( m_tab == 2 ) {
@@ -740,6 +822,41 @@ namespace ui {
             dl->ChannelsSplit( 2 );
             dl->ChannelsSetCurrent( 1 );
 
+            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
+            checkbox( "Enable autobot", &m_autobot.enabled );
+            ly = ImGui::GetCursorPos( ).y;
+
+            const float lbox_bottom = ly + 10.0f;
+            dl->ChannelsSetCurrent( 0 );
+            draw_card( dl, wpos, L_X, lbox_top, lbox_bottom, L_W, "autobot options", colors::col_hdr );
+            dl->ChannelsMerge( );
+
+            const float rbox_top = TITLE_H + 12.0f;
+            float ry = rbox_top + 28.0f;
+
+            dl->ChannelsSplit( 2 );
+            dl->ChannelsSetCurrent( 1 );
+
+            if ( m_autobot.enabled && snap.game.cur_state == osu::game_state_t::play ) {
+                dl->AddText( S( R_X + 12.0f, ry ), IM_COL32( 100, 255, 100, 255 ), "Status: Running" );
+            }
+            else {
+                dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "Status: Idle" );
+            }
+            ry += ImGui::GetTextLineHeight( ) + 8.0f;
+
+            const float rbox_bottom = ry + 10.0f;
+            dl->ChannelsSetCurrent( 0 );
+            draw_card( dl, wpos, R_X, rbox_top, rbox_bottom, R_W, "diagnostics", colors::col_hdr );
+            dl->ChannelsMerge( );
+        }
+        else if ( m_tab == 4 ) {
+            const float lbox_top = TITLE_H + 12.0f;
+            float ly = lbox_top + 28.0f;
+
+            dl->ChannelsSplit( 2 );
+            dl->ChannelsSetCurrent( 1 );
+
             dl->AddText( S( L_X + 12.0f, ly ), colors::text_bright, "Custom Gameplay Keys:" );
             ly += ImGui::GetTextLineHeight( ) + 8.0f;
 
@@ -814,6 +931,14 @@ namespace ui {
 
             ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
             checkbox( "Stream proof", &stream_proof );
+            ly = ImGui::GetCursorPos( ).y + 4.0f;
+
+            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
+            if ( checkbox( "Block scores", &score_blocker ) ) {
+                if ( m_cache ) {
+                    set_score_blocker_state( score_blocker, m_cache->process_handle( ) );
+                }
+            }
             ly = ImGui::GetCursorPos( ).y;
 
             const float lbox_bottom = ly + 10.0f;

@@ -14,4 +14,179 @@
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="core.cxx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\deps\LzmaDec.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\deps\lzma_helper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ImGui\imgui_demo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ui\overlay.cxx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ImGui\imgui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ImGui\imgui_draw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ImGui\imgui_tables.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ImGui\imgui_widgets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ImGui\imgui_impl_win32.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ImGui\imgui_impl_dx11.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="core\aim_assist\aimbot.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\beatmap\i_beatmap_provider.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\beatmap\lazer_index.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\beatmap\lazer_memory.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\beatmap\lazer_ruleset_reader.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\beatmap\songs_resolver.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\beatmap\stable_parser.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\game\client_factory.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\game\i_osu_client.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\game\osu_lazer.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\game\osu_stable.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\relax\relax.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\replay\osr_decoder.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\replay\replay_bot.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\threads\cache.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\defs\offsets_lazer.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\defs\offsets_stable.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\deps\7zTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\deps\Compiler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\deps\LzmaDec.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\deps\lzma_decode.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\deps\lzma_helper.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\deps\Precomp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imconfig.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imgui.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imgui_impl_dx11.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imgui_impl_win32.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imgui_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imstb_rectpack.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imstb_textedit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ImGui\imstb_truetype.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\includes.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\memory\input.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\input\mouse_hook.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\memory\ntdll.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\memory\win32u.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\memory\process.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\memory\scanner.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\memory\syscall.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\struct\game_snapshot.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\struct\osu_types.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ui\elements.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ui\overlay.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\ui\theme.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\util\playfield.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\autobot\autobot.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

@@ -349,6 +349,10 @@ namespace beatmap {
                             const float length = std::stof( vars[ 7 ] );
                             const float beat_length = beat_length_at( timing_points, time );
 
+                            obj.slider_curve_str = vars[ 5 ];
+                            obj.slider_length = length;
+                            obj.slider_repeat = repeat;
+
                             if ( slider_multiplier > 0.f && beat_length > 0.f && length > 0.f ) {
                                 const float one_lap = ( length / ( slider_multiplier * 100.f ) ) * beat_length;
                                 obj.end_time = time + static_cast<int32_t>( std::ceil( one_lap * static_cast<float>( repeat ) ) );

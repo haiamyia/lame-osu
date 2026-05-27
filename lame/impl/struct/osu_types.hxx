@@ -37,6 +37,9 @@ namespace osu {
         float screen_y = 0.f;
         uint8_t type = 0;
         int32_t stack_index = 0;
+        std::string slider_curve_str;
+        float slider_length = 0.f;
+        int32_t slider_repeat = 0;
     };
 
     struct beatmap_data_t {

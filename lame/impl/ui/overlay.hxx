@@ -1,8 +1,13 @@
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -10,6 +15,7 @@
 #include <core/aim_assist/aimbot.hxx>
 #include <core/relax/relax.hxx>
 #include <core/replay/replay_bot.hxx>
+#include <core/autobot/autobot.hxx>
 #include <core/threads/cache.hxx>
 #include <impl/input/mouse_hook.hxx>
 #include <functional>
@@ -35,8 +41,10 @@ namespace ui {
         aim_assist::c_aimbot& aim( ) { return m_aim; }
         relax::c_relax& relax( ) { return m_relax; }
         replay::c_replay_bot& replay( ) { return m_replay; }
+        autobot::c_autobot& auto_bot( ) { return m_autobot; }
 
         bool stream_proof = false;
+        bool score_blocker = false;
 
         static constexpr int MENU_W = 700;
         static constexpr int MENU_H = 420;
@@ -52,6 +60,7 @@ namespace ui {
         input::c_mouse_hook m_mouse_hook;
         relax::c_relax m_relax;
         replay::c_replay_bot m_replay;
+        autobot::c_autobot m_autobot;
 
         ID3D11Device* m_device = nullptr;
         ID3D11DeviceContext* m_context = nullptr;

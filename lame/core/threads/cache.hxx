@@ -67,6 +67,11 @@ namespace threads {
             return m_snapshot;
         }
 
+        [[nodiscard]] HANDLE process_handle( ) const {
+            std::shared_lock lock( m_mutex );
+            return m_process.handle( );
+        }
+
         beatmap::c_stable_parser& stable_parser( ) { return m_stable_parser; }
 
         using module_tick_fn = std::function<void( const osu::full_snapshot_t& )>;
