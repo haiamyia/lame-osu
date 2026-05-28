@@ -1,4 +1,4 @@
-#include <impl/ui/overlay.hxx>
+﻿#include <impl/ui/overlay.hxx>
 #include <impl/ui/theme.hxx>
 #include <impl/memory/input.hxx>
 #include <impl/util/playfield.hxx>
@@ -25,8 +25,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT ms
 
 namespace {
 
-    bool overlay_tablet_hook_transform(
+    bool overlay_aim_hook_transform(
         void* ctx, POINT pen, const MSLLHOOKSTRUCT& raw, POINT* out ) {
+        (void)pen;
         if ( !ctx || !out )
             return false;
 
@@ -169,8 +170,8 @@ namespace ui {
         ImGui_ImplWin32_Init( m_hwnd );
         ImGui_ImplDX11_Init( m_device, m_context );
 
-        m_mouse_hook.set_filter_injected_only( false );
-        m_mouse_hook.set_transform( overlay_tablet_hook_transform, this );
+        m_mouse_hook.set_filter_injected_only( true );
+        m_mouse_hook.set_transform( overlay_aim_hook_transform, this );
         m_mouse_hook.install( );
 
         return true;
@@ -226,22 +227,30 @@ namespace ui {
         input::invalidate_virtual_desktop( );
         input::virtual_desktop( );
 
+        int target_x = 0;
+        int target_y = 0;
+
         if ( !osu_hwnd || !IsWindow( osu_hwnd ) ) {
             const int screen_w = GetSystemMetrics( SM_CXSCREEN );
             const int screen_h = GetSystemMetrics( SM_CYSCREEN );
-            const int x = ( screen_w - MENU_W ) / 2;
-            const int y = ( screen_h - MENU_H ) / 2;
-            SetWindowPos( m_hwnd, HWND_TOPMOST, x, y, MENU_W, MENU_H, SWP_NOACTIVATE );
-            return;
+            target_x = ( screen_w - static_cast<int>( MENU_W ) ) / 2;
+            target_y = ( screen_h - static_cast<int>( MENU_H ) ) / 2;
+        }
+        else {
+            RECT client{};
+            if ( playfield::get_playfield_rect( osu_hwnd, client ) ) {
+                target_x = client.left + ( ( client.right - client.left ) - static_cast<int>( MENU_W ) ) / 2;
+                target_y = client.top + ( ( client.bottom - client.top ) - static_cast<int>( MENU_H ) ) / 2;
+            }
+            else {
+                return;
+            }
         }
 
-        RECT client{};
-        if ( !playfield::get_playfield_rect( osu_hwnd, client ) )
-            return;
+        target_x += m_menu_offset_x;
+        target_y += m_menu_offset_y;
 
-        const int x = client.left + ( ( client.right - client.left ) - MENU_W ) / 2;
-        const int y = client.top + ( ( client.bottom - client.top ) - MENU_H ) / 2;
-        SetWindowPos( m_hwnd, HWND_TOPMOST, x, y, MENU_W, MENU_H, SWP_NOACTIVATE );
+        SetWindowPos( m_hwnd, HWND_TOPMOST, target_x, target_y, static_cast<int>( MENU_W ), static_cast<int>( MENU_H ), SWP_NOACTIVATE );
     }
 
     void c_overlay::apply_visibility( ) {
@@ -364,6 +373,8 @@ namespace ui {
     }
 
     void c_overlay::reset_modules( const osu::game_snapshot_t& game ) {
+        m_game_time_stall_start_ms = 0;
+        m_aim.set_user_input_blocked( false );
         m_aim.on_leave_play( );
         osu::game_snapshot_t mod_game = game;
         if ( mod_game.client == osu::client_kind_t::lazer ) {
@@ -389,6 +400,7 @@ namespace ui {
             m_prev_game_time = -1;
             m_prev_map_id = -1;
             m_prev_map_sig.clear( );
+            m_game_time_stall_start_ms = 0;
         }
 
         if ( in_play && !map_sig.empty( ) && !m_prev_map_sig.empty( ) && map_sig != m_prev_map_sig )
@@ -402,12 +414,6 @@ namespace ui {
             reset_modules( snap.game );
 
         m_prev_state = snap.game.cur_state;
-        if ( in_play ) {
-            m_prev_map_id = snap.game.map_id;
-            m_prev_game_time = snap.game.cur_time;
-            if ( !map_sig.empty( ) )
-                m_prev_map_sig = map_sig;
-        }
 
         if ( in_play && snap.beatmap.loaded && !snap.beatmap.objects.empty( ) ) {
             osu::full_snapshot_t mod_snap = snap;
@@ -415,10 +421,43 @@ namespace ui {
                 mod_snap.game.left_key = m_custom_left_key;
                 mod_snap.game.right_key = m_custom_right_key;
             }
-            m_aim.update( mod_snap.game, mod_snap.beatmap );
+
+            constexpr uint64_t k_pause_stall_ms = 120;
+            const uint64_t     now_ms = ::GetTickCount64( );
+            const int32_t      cur_time = mod_snap.game.cur_time;
+            const bool         time_stalled =
+                m_prev_game_time >= 0 && cur_time == m_prev_game_time;
+
+            if ( time_stalled ) {
+                if ( m_game_time_stall_start_ms == 0 )
+                    m_game_time_stall_start_ms = now_ms;
+            }
+            else {
+                m_game_time_stall_start_ms = 0;
+            }
+
+            const bool map_paused = m_game_time_stall_start_ms != 0
+                                    && ( now_ms - m_game_time_stall_start_ms ) >= k_pause_stall_ms;
+
+            m_aim.set_user_input_blocked( map_paused );
+
+            if ( !map_paused && !( m_replay.enabled && m_replay.disable_aim ) )
+                m_aim.update( mod_snap.game, mod_snap.beatmap );
+
             m_relax.update( mod_snap.game, mod_snap.beatmap );
-            m_replay.update( mod_snap.game, mod_snap.beatmap );
-            m_autobot.update( mod_snap.game, mod_snap.beatmap );
+            m_replay.update( mod_snap.game, mod_snap.beatmap, map_paused );
+            m_autobot.update( mod_snap.game, mod_snap.beatmap, map_paused );
+        }
+        else {
+            m_game_time_stall_start_ms = 0;
+            m_aim.set_user_input_blocked( false );
+        }
+
+        if ( in_play ) {
+            m_prev_map_id = snap.game.map_id;
+            m_prev_game_time = snap.game.cur_time;
+            if ( !map_sig.empty( ) )
+                m_prev_map_sig = map_sig;
         }
     }
 
@@ -550,6 +589,31 @@ namespace ui {
         if ( ImGui::IsItemActive( ) && ImGui::IsMouseClicked( ImGuiMouseButton_Left ) ) {
             ReleaseCapture( );
             SendMessageW( m_hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0 );
+
+            RECT rect{};
+            if ( GetWindowRect( m_hwnd, &rect ) ) {
+                const HWND osu_hwnd = input::target_window( );
+                int center_x = 0;
+                int center_y = 0;
+
+                if ( !osu_hwnd || !IsWindow( osu_hwnd ) ) {
+                    const int screen_w = GetSystemMetrics( SM_CXSCREEN );
+                    const int screen_h = GetSystemMetrics( SM_CYSCREEN );
+                    center_x = ( screen_w - static_cast<int>( MENU_W ) ) / 2;
+                    center_y = ( screen_h - static_cast<int>( MENU_H ) ) / 2;
+                }
+                else {
+                    RECT client{};
+                    if ( playfield::get_playfield_rect( osu_hwnd, client ) ) {
+                        center_x = client.left + ( ( client.right - client.left ) - static_cast<int>( MENU_W ) ) / 2;
+                        center_y = client.top + ( ( client.bottom - client.top ) - static_cast<int>( MENU_H ) ) / 2;
+                    }
+                }
+
+                m_menu_offset_x = rect.left - center_x;
+                m_menu_offset_y = rect.top - center_y;
+                m_menu_dragged = true;
+            }
         }
 
         const float CLOSE_W = 18.0f;
@@ -564,56 +628,57 @@ namespace ui {
         }
         ImGui::PopStyleColor( 4 );
 
-        if ( m_tab == 0 ) {
+        if (m_tab == 0) {
             const float lbox_top = TITLE_H + 12.0f;
             float ly = lbox_top + 28.0f;
-
-            dl->ChannelsSplit( 2 );
-            dl->ChannelsSetCurrent( 1 );
-
-            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            checkbox( "Enable aim assist", &m_aim.enabled );
-            ly = ImGui::GetCursorPos( ).y + 4.0f;
-
-            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            checkbox( "Ignore sliders", &m_aim.ignore_sliders );
-            ly = ImGui::GetCursorPos( ).y;
-
+            dl->ChannelsSplit(2);
+            dl->ChannelsSetCurrent(1);
+            ImGui::SetCursorPos(ImVec2(L_X + 10.0f, ly));
+            checkbox("Enable aim assist", &m_aim.enabled);
+            ly = ImGui::GetCursorPos().y + 4.0f;
+            ImGui::SetCursorPos(ImVec2(L_X + 10.0f, ly));
+            checkbox("Ignore sliders", &m_aim.ignore_sliders);
+            ly = ImGui::GetCursorPos().y + 4.0f;
+            ImGui::SetCursorPos(ImVec2(L_X + 10.0f, ly));
+            checkbox("Legit mode", &m_aim.legit_mode);
+            ly = ImGui::GetCursorPos().y + 4.0f;
+            ImGui::SetCursorPos(ImVec2(L_X + 10.0f, ly));
+            checkbox("Use hitbox", &m_aim.use_hitbox);
+            ly = ImGui::GetCursorPos().y + 4.0f;
+            ImGui::SetCursorPos(ImVec2(L_X + 10.0f, ly));
+            checkbox("Tablet mode", &m_aim.tablet_mode);
+            ly = ImGui::GetCursorPos().y + 4.0f;
             const float lbox_bottom = ly + 10.0f;
-            dl->ChannelsSetCurrent( 0 );
-            draw_card( dl, wpos, L_X, lbox_top, lbox_bottom, L_W, "aim assist", colors::col_hdr );
-            dl->ChannelsMerge( );
+            dl->ChannelsSetCurrent(0);
+            draw_card(dl, wpos, L_X, lbox_top, lbox_bottom, L_W, "aim assist", colors::col_hdr);
+            dl->ChannelsMerge();
 
             const float rbox_top = TITLE_H + 12.0f;
             float ry = rbox_top + 28.0f;
-
-            dl->ChannelsSplit( 2 );
-            dl->ChannelsSetCurrent( 1 );
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Strength", &m_aim.strength, 0.f, 20.f, "", "%.1f" );
-            ry = ImGui::GetCursorPos( ).y + 3.0f;
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Dead zone", &m_aim.dead_zone, 0.f, 100.f, " %", "%.0f" );
-            ry = ImGui::GetCursorPos( ).y + 3.0f;
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_int( "Timing window", &m_aim.timing_window, 10, 200, "ms" );
-            ry = ImGui::GetCursorPos( ).y + 3.0f;
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Drift decay", &m_aim.drift_decay, 0.01f, 0.50f, "", "%.2f" );
-            ry = ImGui::GetCursorPos( ).y + 3.0f;
-
-            ImGui::SetCursorPos( ImVec2( R_X + 10.0f, ry ) );
-            slider_float( "Passive pull", &m_aim.passive_pull, 0.f, 1.f, "", "%.2f" );
-            ry = ImGui::GetCursorPos( ).y;
-
+            dl->ChannelsSplit(2);
+            dl->ChannelsSetCurrent(1);
+            ImGui::SetCursorPos(ImVec2(R_X + 10.0f, ry));
+            slider_float("Strength", &m_aim.strength, 0.f, 12.f, "", "%.1f");
+            ry = ImGui::GetCursorPos().y + 3.0f;
+            ImGui::SetCursorPos(ImVec2(R_X + 10.0f, ry));
+            slider_int("Timing window", &m_aim.timing_ms, 10, 300, "%d ms");
+            ry = ImGui::GetCursorPos().y + 3.0f;
+            ImGui::SetCursorPos(ImVec2(R_X + 10.0f, ry));
+            slider_float("Aim cone", &m_aim.aim_cone_deg, 0.f, 180.f, "", "%.0f");
+            ry = ImGui::GetCursorPos().y + 3.0f;
+            ImGui::SetCursorPos(ImVec2(R_X + 10.0f, ry));
+            slider_float("Idle threshold", &m_aim.idle_threshold_px, 0.f, 20.f, "", "%.1f");
+            ry = ImGui::GetCursorPos().y + 3.0f;
+            ImGui::SetCursorPos(ImVec2(R_X + 10.0f, ry));
+            slider_float("Blend (early)", &m_aim.blend_early, 0.f, 1.f, "", "%.2f");
+            ry = ImGui::GetCursorPos().y + 3.0f;
+            ImGui::SetCursorPos(ImVec2(R_X + 10.0f, ry));
+            slider_float("Blend (late)", &m_aim.blend_late, 0.f, 1.f, "", "%.2f");
+            ry = ImGui::GetCursorPos().y + 3.0f;
             const float rbox_bottom = ry + 10.0f;
-            dl->ChannelsSetCurrent( 0 );
-            draw_card( dl, wpos, R_X, rbox_top, rbox_bottom, R_W, "aim assist tuning", colors::col_hdr );
-            dl->ChannelsMerge( );
+            dl->ChannelsSetCurrent(0);
+            draw_card(dl, wpos, R_X, rbox_top, rbox_bottom, R_W, "aim assist tuning", colors::col_hdr);
+            dl->ChannelsMerge();
         }
         else if ( m_tab == 1 ) {
             const float lbox_top = TITLE_H + 12.0f;

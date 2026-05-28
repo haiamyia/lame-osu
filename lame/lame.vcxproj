@@ -99,7 +99,9 @@
     <ClCompile Include="impl\ImGui\imgui_impl_dx11.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="core\aim_assist\assist_physics.hxx" />
     <ClInclude Include="core\aim_assist\aimbot.hxx" />
+    <ClInclude Include="core\aim_assist\slider_path.hxx" />
     <ClInclude Include="core\autobot\autobot.hxx" />
     <ClInclude Include="core\beatmap\i_beatmap_provider.hxx" />
     <ClInclude Include="core\beatmap\lazer_index.hxx" />

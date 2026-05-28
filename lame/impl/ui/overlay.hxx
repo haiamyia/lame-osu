@@ -73,13 +73,18 @@ namespace ui {
 
         osu::game_state_t m_prev_state = osu::game_state_t::unknown;
         int32_t m_prev_map_id = -1;
-        int32_t m_prev_game_time = -1;
+        int32_t  m_prev_game_time = -1;
+        uint64_t m_game_time_stall_start_ms = 0;
         std::string m_prev_map_sig;
 
         int m_custom_left_key = 'Z';
         int m_custom_right_key = 'X';
         bool m_waiting_left = false;
         bool m_waiting_right = false;
+
+        int m_menu_offset_x = 0;
+        int m_menu_offset_y = 0;
+        bool m_menu_dragged = false;
 
         static LRESULT CALLBACK wnd_proc( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp );
         bool init_d3d( );

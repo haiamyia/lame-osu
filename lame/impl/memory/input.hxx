@@ -130,6 +130,7 @@ namespace input {
         in.mi.dwFlags = MOUSEEVENTF_MOVE;
         in.mi.dx = dx;
         in.mi.dy = dy;
+        in.mi.dwExtraInfo = 0xDEADC0DE;
         send_inputs( 1, &in, sizeof( INPUT ) );
     }
 
@@ -148,6 +149,7 @@ namespace input {
         in.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
         in.mi.dx = static_cast<LONG>( norm_x + 0.5 );
         in.mi.dy = static_cast<LONG>( norm_y + 0.5 );
+        in.mi.dwExtraInfo = 0xDEADC0DE;
         return send_inputs( 1, &in, sizeof( INPUT ) ) != 0;
     }
 

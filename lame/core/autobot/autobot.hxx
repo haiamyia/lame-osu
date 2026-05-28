@@ -29,14 +29,25 @@ namespace autobot {
             m_last_active_idx = -1;
             m_synced = false;
             m_in_play = false;
+            m_driving_cursor = false;
         }
 
-        void update( const osu::game_snapshot_t& game, const osu::beatmap_data_t& map ) {
+        void update( const osu::game_snapshot_t& game, const osu::beatmap_data_t& map, bool user_control = false ) {
             if ( !enabled || game.cur_state != osu::game_state_t::play || !map.loaded || map.objects.empty( ) ) {
                 if ( m_in_play )
                     on_leave_play( game );
                 return;
             }
+
+            if ( user_control ) {
+                if ( m_driving_cursor ) {
+                    release_keys( );
+                    m_driving_cursor = false;
+                }
+                return;
+            }
+
+            m_driving_cursor = true;
 
             const HWND hwnd = input::target_window( );
             RECT window{};
@@ -101,6 +112,7 @@ namespace autobot {
         int m_last_game_time = 0;
         bool m_k1_down = false;
         bool m_k2_down = false;
+        bool m_driving_cursor = false;
         WORD m_k1_actual = 0;
         WORD m_k2_actual = 0;
 

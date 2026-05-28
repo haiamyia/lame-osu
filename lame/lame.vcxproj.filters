@@ -50,7 +50,13 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="core\aim_assist\assist_physics.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="core\aim_assist\aimbot.hxx">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\aim_assist\slider_path.hxx">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="core\beatmap\i_beatmap_provider.hxx">

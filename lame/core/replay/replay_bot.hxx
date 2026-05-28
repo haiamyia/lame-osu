@@ -46,6 +46,7 @@ namespace replay {
             m_frame_index = 0;
             m_last_game_time = -1;
             m_synced = false;
+            m_driving_cursor = false;
             release_keys( );
         }
 
@@ -54,13 +55,24 @@ namespace replay {
             m_frame_index = 0;
             m_last_game_time = -1;
             m_synced = false;
+            m_driving_cursor = false;
             m_left_vk = static_cast<WORD>( game.left_key ? game.left_key : 'Z' );
             m_right_vk = static_cast<WORD>( game.right_key ? game.right_key : 'X' );
         }
 
-        void update( const osu::game_snapshot_t& game, const osu::beatmap_data_t& /*map*/ ) {
+        void update( const osu::game_snapshot_t& game, const osu::beatmap_data_t& /*map*/, bool user_control = false ) {
             if ( !enabled || !m_replay.valid || game.cur_state != osu::game_state_t::play )
                 return;
+
+            if ( user_control ) {
+                if ( m_driving_cursor ) {
+                    release_keys( );
+                    m_driving_cursor = false;
+                }
+                return;
+            }
+
+            m_driving_cursor = true;
 
             m_left_vk = static_cast<WORD>( game.left_key ? game.left_key : 'Z' );
             m_right_vk = static_cast<WORD>( game.right_key ? game.right_key : 'X' );
@@ -154,6 +166,7 @@ namespace replay {
         bool m_synced = false;
         bool m_left_down = false;
         bool m_right_down = false;
+        bool m_driving_cursor = false;
         WORD m_left_vk = 'Z';
         WORD m_right_vk = 'X';
 

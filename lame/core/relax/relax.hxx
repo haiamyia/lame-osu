@@ -19,7 +19,7 @@ namespace relax {
     public:
         bool enabled = false;
 
-        float hit_window_ms = 13.f;   // 0-40
+        float hit_window_ms = 10.f;   // 0-40
 
         int tap_style = static_cast<int>( tap_style_t::alternate );
 
