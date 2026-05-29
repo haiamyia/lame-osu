@@ -83,6 +83,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;dwmapi.lib;ntdll.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -145,6 +146,8 @@
     <ClInclude Include="impl\struct\osu_types.hxx" />
     <ClInclude Include="impl\ui\elements.hxx" />
     <ClInclude Include="impl\ui\overlay.hxx" />
+    <ClInclude Include="impl\config\config_store.hxx" />
+    <ClInclude Include="impl\util\stacking.hxx" />
     <ClInclude Include="impl\ui\theme.hxx" />
     <ClInclude Include="impl\util\playfield.hxx" />
   </ItemGroup>

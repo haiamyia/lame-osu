@@ -18,8 +18,10 @@
 #include <core/autobot/autobot.hxx>
 #include <core/threads/cache.hxx>
 #include <impl/input/mouse_hook.hxx>
+#include <impl/config/config_store.hxx>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace ui {
 
@@ -37,6 +39,9 @@ namespace ui {
 
         void tick_modules( const osu::full_snapshot_t& snap );
         void reset_modules( const osu::game_snapshot_t& game );
+        void apply_custom_keys( osu::game_snapshot_t& game ) const;
+        config::settings_t capture_settings( ) const;
+        void apply_settings( const config::settings_t& s );
 
         aim_assist::c_aimbot& aim( ) { return m_aim; }
         relax::c_relax& relax( ) { return m_relax; }
@@ -70,6 +75,10 @@ namespace ui {
         int m_tab = 0;
         char m_replay_path_utf8[ 512 ]{};
         char m_songs_path_utf8[ 512 ]{};
+        char m_config_name_utf8[ 128 ]{};
+        std::vector<std::string> m_config_profiles;
+        std::string m_config_status;
+        int m_config_selected = -1;
 
         osu::game_state_t m_prev_state = osu::game_state_t::unknown;
         int32_t m_prev_map_id = -1;

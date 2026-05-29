@@ -74,6 +74,12 @@ namespace threads {
 
         beatmap::c_stable_parser& stable_parser( ) { return m_stable_parser; }
 
+        void invalidate_beatmap_cache( ) {
+            std::unique_lock lock( m_mutex );
+            m_snapshot.beatmap = {};
+            m_last_map_sig.clear( );
+        }
+
         using module_tick_fn = std::function<void( const osu::full_snapshot_t& )>;
 
         void set_module_tick( module_tick_fn fn ) {
@@ -123,6 +129,7 @@ namespace threads {
 
             const auto osu_hwnd = playfield::find_osu_window( static_cast<DWORD>( pid ) );
             input::set_target_window( osu_hwnd );
+            input::invalidate_virtual_desktop( );
 
             if ( m_client->kind( ) == osu::client_kind_t::stable ) {
                 const auto songs = beatmap::songs::resolve( m_process );
@@ -160,8 +167,10 @@ namespace threads {
                 }
                 else if ( !input::target_window( ) || !IsWindow( input::target_window( ) ) ) {
                     const auto hwnd = playfield::find_osu_window( static_cast<DWORD>( m_process.pid( ) ) );
-                    if ( hwnd )
+                    if ( hwnd ) {
                         input::set_target_window( hwnd );
+                        input::invalidate_virtual_desktop( );
+                    }
                 }
 
                 {
@@ -254,9 +263,7 @@ namespace threads {
                     game_snap.map_folder + "|" + game_snap.map_file + "|" + game_snap.beatmap_hash + "|" +
                     game_snap.beatmap_version;
                 const bool map_changed = has_map && map_sig != m_last_map_sig;
-                const bool retry_reload =
-                    in_play && has_map && !beatmap_loaded &&
-                    ( game_snap.cur_time < 2000 || map_changed );
+                const bool retry_reload = in_play && has_map && !beatmap_loaded;
 
                 if ( game_snap.attached && load_state && has_map && ( map_changed || retry_reload ) ) {
 

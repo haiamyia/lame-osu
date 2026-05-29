@@ -226,9 +226,10 @@ namespace aim_assist {
             const float jump_scale = target_jump_scale( target_x, target_y, st, 72.f );
 
             if ( in_window ) {
-                float fade = 1.f - static_cast<float>( time_until_hit ) / static_cast<float>( window_ms );
-                fade = std::clamp( fade, 0.f, 1.f );
-                const float window_strength = fade * cfg.strength;
+                const float t = std::clamp(
+                    static_cast<float>( time_until_hit ) / static_cast<float>( window_ms ), 0.f, 1.f );
+                const float fade = cfg.blend_early + ( cfg.blend_late - cfg.blend_early ) * ( 1.f - t );
+                const float window_strength = std::clamp( fade * cfg.strength, cfg.strength * cfg.blend_early, 1.f );
                 const float angle_decay = cfg.return_rate * dt_norm;
 
                 if ( on_note || !cfg.legit_mode ) {
@@ -255,7 +256,8 @@ namespace aim_assist {
                         st.move_blend_rate = move_blend;
                     }
 
-                    move_blend = st.move_blend - angle_decay;
+                    move_blend = std::min( 1.f, move_blend + dt_norm * 0.04f );
+                    move_blend = move_blend - angle_decay;
                     if ( move_blend < 0.f )
                         move_blend = 0.f;
                     st.move_blend = move_blend;
@@ -325,7 +327,7 @@ namespace aim_assist {
         st.offset_x += ( st.smooth_x - st.offset_x ) * blend;
         st.offset_y += ( st.smooth_y - st.offset_y ) * blend;
 
-        cap_offset_step( st, prev_ox, prev_oy, 16.f );
+        cap_offset_step( st, prev_ox, prev_oy, 11.f );
 
         st.last_raw_x = mx;
         st.last_raw_y = my;

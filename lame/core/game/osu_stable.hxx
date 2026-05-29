@@ -14,8 +14,6 @@ namespace game {
             const auto time_scan = scanner.scan( offsets::stable::pattern_time, offsets::stable::pattern_time_offset );
             const auto state_scan = scanner.scan( offsets::stable::pattern_state, offsets::stable::pattern_state_offset );
             const auto beatmap_scan = scanner.scan( offsets::stable::pattern_beatmap, offsets::stable::pattern_beatmap_offset );
-            const auto left_key_scan = scanner.scan( offsets::stable::pattern_left_key, offsets::stable::pattern_left_key_offset );
-            const auto right_key_scan = scanner.scan( offsets::stable::pattern_right_key, offsets::stable::pattern_right_key_offset );
             const auto mods_scan = scanner.scan( offsets::stable::pattern_menu_mods, offsets::stable::pattern_menu_mods_offset );
 
             if ( !time_scan || !state_scan )
@@ -25,15 +23,10 @@ namespace game {
             m_state_ptr = process.read<uint32_t>( state_scan );
             if ( beatmap_scan )
                 m_beatmap_base = process.read<uint32_t>( beatmap_scan );
-            if ( left_key_scan )
-                m_left_key_addr = left_key_scan;
-            if ( right_key_scan )
-                m_right_key_addr = right_key_scan;
             if ( mods_scan )
                 m_mods_ptr = process.read<uint32_t>( mods_scan );
 
             m_logged_first_play = false;
-            m_logged_key_fallback = false;
 
             return m_time_ptr != 0 && m_state_ptr != 0;
         }
@@ -61,26 +54,6 @@ namespace game {
                 }
             }
 
-            snap.left_key = 'Z';
-            snap.right_key = 'X';
-
-            if ( m_left_key_addr ) {
-                const auto key = process.read<uint8_t>( m_left_key_addr );
-                if ( key != 0 )
-                    snap.left_key = key;
-            }
-            if ( m_right_key_addr ) {
-                const auto key = process.read<uint8_t>( m_right_key_addr );
-                if ( key != 0 )
-                    snap.right_key = key;
-            }
-
-            if ( !m_logged_key_fallback &&
-                 ( snap.left_key == 'Z' && snap.right_key == 'X' ) &&
-                 ( !m_left_key_addr || !m_right_key_addr ) ) {
-                m_logged_key_fallback = true;
-            }
-
             if ( snap.cur_state == osu::game_state_t::play && !m_logged_first_play ) {
                 m_logged_first_play = true;
             }
@@ -95,11 +68,8 @@ namespace game {
         uint64_t m_time_ptr = 0;
         uint64_t m_state_ptr = 0;
         uint64_t m_beatmap_base = 0;
-        uint64_t m_left_key_addr = 0;
-        uint64_t m_right_key_addr = 0;
         uint64_t m_mods_ptr = 0;
         bool m_logged_first_play = false;
-        bool m_logged_key_fallback = false;
     };
 
 }

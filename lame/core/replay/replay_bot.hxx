@@ -91,8 +91,7 @@ namespace replay {
                 return;
 
             const int game_time = game.cur_time + time_offset_ms;
-            const int target_time =
-                static_cast<int>( static_cast<double>( game_time ) * speed_multiplier ) + time_offset_ms;
+            const int target_time = static_cast<int>( static_cast<double>( game_time ) * speed_multiplier );
 
             const auto& frames = m_replay.frames;
             if ( frames.size( ) < 2 )
@@ -140,14 +139,7 @@ namespace replay {
 
             if ( !disable_aim ) {
                 const auto target_p = playfield::playfield_to_screen( x, y, window, y_playfield_offset );
-
-                POINT current{};
-                if ( input::get_cursor_pos( &current ) ) {
-                    const int dx = target_p.x - current.x;
-                    const int dy = target_p.y - current.y;
-                    if ( dx != 0 || dy != 0 )
-                        input::move_relative( dx, dy );
-                }
+                input::move_absolute_virtual_desktop( target_p.x, target_p.y );
             }
 
             if ( !disable_clicking ) {

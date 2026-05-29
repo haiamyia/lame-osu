@@ -30,6 +30,10 @@ namespace autobot {
             m_synced = false;
             m_in_play = false;
             m_driving_cursor = false;
+            m_use_k2_next = false;
+            m_last_click_time = -99999;
+            m_spinner_active = false;
+            m_spinner_start_time = -1;
         }
 
         void update( const osu::game_snapshot_t& game, const osu::beatmap_data_t& map, bool user_control = false ) {
@@ -72,17 +76,29 @@ namespace autobot {
                 m_slider_cache.clear( );
                 m_scheduled_through_idx = -1;
                 m_last_active_idx = -1;
+                m_use_k2_next = false;
+                m_last_click_time = -99999;
+                m_spinner_active = false;
+                m_spinner_start_time = -1;
                 m_synced = true;
             }
             m_last_game_time = gt;
 
             schedule_clicks( game, map );
 
-            point_t target_win = get_target_position( gt, map, win_w, win_h );
+            const int spinner_idx = find_spinner_at_time( gt, map );
+            if ( spinner_idx >= 0 ) {
+                drive_spinner_motion( map.objects[ static_cast<size_t>( spinner_idx ) ], window, win_w, win_h );
+            }
+            else {
+                m_spinner_active = false;
+                m_spinner_start_time = -1;
 
-            const int sx = static_cast<int>( window.left + target_win.x );
-            const int sy = static_cast<int>( window.top + target_win.y );
-            input::move_absolute_virtual_desktop( sx, sy );
+                point_t target_win = get_target_position( gt, map, win_w, win_h );
+                const int sx = static_cast<int>( window.left + target_win.x );
+                const int sy = static_cast<int>( window.top + target_win.y );
+                input::move_absolute_virtual_desktop( sx, sy );
+            }
 
             flush_queue( gt );
         }
@@ -113,8 +129,14 @@ namespace autobot {
         bool m_k1_down = false;
         bool m_k2_down = false;
         bool m_driving_cursor = false;
+        bool m_use_k2_next = false;
+        int  m_last_click_time = -99999;
         WORD m_k1_actual = 0;
         WORD m_k2_actual = 0;
+        bool m_spinner_active = false;
+        int m_spinner_start_time = -1;
+        float m_spinner_angle = 0.f;
+        uint64_t m_spinner_last_wall_ms = 0;
 
         static void resolve_keys( const osu::game_snapshot_t& game, WORD& k1, WORD& k2 ) {
             k1 = static_cast<WORD>( game.left_key );
@@ -140,6 +162,110 @@ namespace autobot {
             down = false;
         }
 
+        static constexpr float k_spinner_omega_rad_per_ms = 477.f * 6.283185307f / 60000.f;
+
+        static bool is_spinner_object( const osu::hit_object_t& obj ) {
+            if ( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::spinner ) )
+                return true;
+
+            if ( !( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::slider ) ) )
+                return false;
+            if ( !obj.slider_curve_str.empty( ) || obj.slider_length > 0.f )
+                return false;
+
+            const int dur = obj.end_time - obj.start_time;
+            if ( dur < 400 )
+                return false;
+
+            const float dx = obj.x - 256.f;
+            const float dy = obj.y - 192.f;
+            return dx * dx + dy * dy < 48.f * 48.f;
+        }
+
+        static point_t spinner_osu_at_angle( const osu::hit_object_t& obj, float angle ) {
+            constexpr float k_center_x = 256.f;
+            constexpr float k_center_y = 192.f;
+            constexpr float k_radius = 90.f;
+
+            const float cx = ( std::abs( obj.x ) > 1.f || std::abs( obj.y ) > 1.f ) ? obj.x : k_center_x;
+            const float cy = ( std::abs( obj.x ) > 1.f || std::abs( obj.y ) > 1.f ) ? obj.y : k_center_y;
+            return { cx + std::cos( angle ) * k_radius, cy + std::sin( angle ) * k_radius };
+        }
+
+        void drive_spinner_motion( const osu::hit_object_t& obj, const RECT& window, int win_w, int win_h ) {
+            const uint64_t now = GetTickCount64( );
+
+            if ( !m_spinner_active || m_spinner_start_time != obj.start_time ) {
+                m_spinner_active = true;
+                m_spinner_start_time = obj.start_time;
+                m_spinner_angle = 0.f;
+                m_spinner_last_wall_ms = now;
+
+                const point_t raw = spinner_osu_at_angle( obj, 0.f );
+                float wx = 0.f, wy = 0.f;
+                playfield::project_osu_to_window( raw.x, raw.y, win_w, win_h, wx, wy, 0 );
+                input::move_absolute_virtual_desktop(
+                    static_cast<int>( window.left + wx ),
+                    static_cast<int>( window.top + wy ) );
+                return;
+            }
+
+            float dt = static_cast<float>( now - m_spinner_last_wall_ms );
+            m_spinner_last_wall_ms = now;
+            if ( dt <= 0.f )
+                return;
+            if ( dt > 100.f )
+                dt = 16.f;
+
+            const float prev_angle = m_spinner_angle;
+            m_spinner_angle += dt * k_spinner_omega_rad_per_ms;
+
+            const point_t p0 = spinner_osu_at_angle( obj, prev_angle );
+            const point_t p1 = spinner_osu_at_angle( obj, m_spinner_angle );
+            float w0x = 0.f, w0y = 0.f, w1x = 0.f, w1y = 0.f;
+            playfield::project_osu_to_window( p0.x, p0.y, win_w, win_h, w0x, w0y, 0 );
+            playfield::project_osu_to_window( p1.x, p1.y, win_w, win_h, w1x, w1y, 0 );
+
+            const int dx = static_cast<int>( window.left + w1x ) - static_cast<int>( window.left + w0x );
+            const int dy = static_cast<int>( window.top + w1y ) - static_cast<int>( window.top + w0y );
+            if ( dx == 0 && dy == 0 )
+                return;
+
+            if ( !input::move_screen_delta( dx, dy ) )
+                input::move_relative( dx, dy );
+        }
+
+        static int find_spinner_at_time( int gt, const osu::beatmap_data_t& map ) {
+            int best_idx = -1;
+            int best_start = -1;
+            for ( size_t i = 0; i < map.objects.size( ); ++i ) {
+                const auto& obj = map.objects[ i ];
+                if ( !is_spinner_object( obj ) )
+                    continue;
+                if ( gt < obj.start_time - 8 || gt > obj.end_time + 8 )
+                    continue;
+                if ( obj.start_time >= best_start ) {
+                    best_start = obj.start_time;
+                    best_idx = static_cast<int>( i );
+                }
+            }
+            return best_idx;
+        }
+
+        static int circle_hold_ms( int press_time, int next_start_time ) {
+            int gap = next_start_time - press_time;
+            if ( gap <= 0 || gap >= 99999 )
+                return 22;
+
+            if ( gap <= 80 )
+                return std::max( 5, gap / 2 - 2 );
+
+            int hold = 22;
+            if ( hold > gap / 2 )
+                hold = gap / 2;
+            return std::max( 5, hold );
+        }
+
         void schedule_clicks( const osu::game_snapshot_t& game, const osu::beatmap_data_t& map ) {
             WORD k1 = 0, k2 = 0;
             resolve_keys( game, k1, k2 );
@@ -147,51 +273,67 @@ namespace autobot {
             for ( int i = m_scheduled_through_idx + 1; i < static_cast<int>( map.objects.size( ) ); ++i ) {
                 const auto& obj = map.objects[ static_cast<size_t>( i ) ];
 
+                if ( is_spinner_object( obj ) ) {
+                    m_use_k2_next = !m_use_k2_next;
+                    const WORD chosen = m_use_k2_next ? k2 : k1;
+                    if ( chosen ) {
+                        int release_time = obj.end_time;
+                        if ( release_time <= obj.start_time )
+                            release_time = obj.start_time + 1000;
+                        m_click_queue.push_back( { obj.start_time, release_time, chosen, false, false } );
+                        m_last_click_time = obj.start_time;
+                    }
+                    m_scheduled_through_idx = i;
+                    continue;
+                }
+
                 const int press_time = obj.start_time;
                 int release_time = obj.end_time;
 
-                if ( !( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::slider ) ) &&
-                     !( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::spinner ) ) ) {
-                    int hold = 30;
+                if ( !( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::slider ) ) ) {
+                    int next_start = press_time + 500;
+                    if ( i + 1 < static_cast<int>( map.objects.size( ) ) )
+                        next_start = map.objects[ static_cast<size_t>( i + 1 ) ].start_time;
 
-                    if ( i + 2 < static_cast<int>( map.objects.size( ) ) ) {
-                        const auto& next_same = map.objects[ static_cast<size_t>( i + 2 ) ];
-                        int gap = next_same.start_time - press_time;
-                        if ( gap > 0 ) {
-                            int max_hold = gap / 2;
-                            if ( hold > max_hold ) {
-                                hold = max_hold;
-                            }
-                        }
-                    }
-
-                    if ( hold < 5 ) hold = 5;
+                    const int hold = circle_hold_ms( press_time, next_start );
                     release_time = press_time + hold;
                 }
 
-                const WORD chosen = ( i % 2 == 0 ) ? k1 : k2;
+                m_use_k2_next = !m_use_k2_next;
+                const WORD chosen = m_use_k2_next ? k2 : k1;
+                if ( !chosen )
+                    continue;
 
                 m_click_queue.push_back( { press_time, release_time, chosen, false, false } );
+                m_last_click_time = press_time;
                 m_scheduled_through_idx = i;
             }
         }
 
         void flush_queue( int gt ) {
-            WORD k1 = 0, k2 = 0;
-            k1 = m_k1_actual;
-            k2 = m_k2_actual;
+            const WORD k1 = m_k1_actual;
+            const WORD k2 = m_k2_actual;
 
             for ( auto& c : m_click_queue ) {
-                if ( !c.pressed && gt >= c.press_time ) {
-                    bool& ref = ( c.key == k1 ) ? m_k1_down : m_k2_down;
-                    press_key( c.key, ref );
-                    c.pressed = true;
-                }
                 if ( c.pressed && !c.released && gt >= c.release_time ) {
                     bool& ref = ( c.key == k1 ) ? m_k1_down : m_k2_down;
                     release_key( c.key, ref );
                     c.released = true;
                 }
+            }
+
+            for ( auto& c : m_click_queue ) {
+                if ( c.pressed || c.released )
+                    continue;
+                if ( gt < c.press_time )
+                    continue;
+
+                bool& ref = ( c.key == k1 ) ? m_k1_down : m_k2_down;
+                if ( ref )
+                    release_key( c.key, ref );
+
+                press_key( c.key, ref );
+                c.pressed = true;
             }
 
             m_click_queue.erase(
@@ -201,19 +343,16 @@ namespace autobot {
         }
 
         int get_movement_end_time( const osu::hit_object_t& obj, const osu::beatmap_data_t& map, int idx ) {
+            if ( is_spinner_object( obj ) )
+                return obj.end_time;
             if ( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::slider ) )
                 return obj.end_time;
-            if ( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::spinner ) )
-                return obj.end_time;
-            
-            int hold = 25;
-            if ( idx + 1 < static_cast<int>( map.objects.size( ) ) ) {
-                int gap = map.objects[ static_cast<size_t>( idx + 1 ) ].start_time - obj.start_time;
-                if ( gap > 0 && hold > gap / 2 ) {
-                    hold = gap / 2;
-                }
-            }
-            return obj.start_time + hold;
+
+            int next_start = obj.start_time + 500;
+            if ( idx + 1 < static_cast<int>( map.objects.size( ) ) )
+                next_start = map.objects[ static_cast<size_t>( idx + 1 ) ].start_time;
+
+            return obj.start_time + circle_hold_ms( obj.start_time, next_start ) + 8;
         }
 
         point_t get_target_position( int gt, const osu::beatmap_data_t& map, int win_w, int win_h ) {
@@ -230,23 +369,44 @@ namespace autobot {
                 return { wx, wy };
             }
 
+            const int spinner_idx = find_spinner_at_time( gt, map );
+            if ( spinner_idx >= 0 ) {
+                m_last_active_idx = spinner_idx;
+                const auto& spin = map.objects[ static_cast<size_t>( spinner_idx ) ];
+                point_t raw = spinner_osu_at_angle( spin, m_spinner_angle );
+                float wx = 0.f, wy = 0.f;
+                playfield::project_osu_to_window( raw.x, raw.y, win_w, win_h, wx, wy, 0 );
+                return { wx, wy };
+            }
+
             int active_idx = -1;
 
             if ( m_last_active_idx >= 0 && m_last_active_idx < static_cast<int>( map.objects.size( ) ) ) {
                 const auto& obj = map.objects[ static_cast<size_t>( m_last_active_idx ) ];
-                int end_t = get_movement_end_time( obj, map, m_last_active_idx );
-                if ( gt >= obj.start_time && gt <= end_t ) {
-                    active_idx = m_last_active_idx;
+                if ( !is_spinner_object( obj ) ) {
+                    int end_t = get_movement_end_time( obj, map, m_last_active_idx );
+                    if ( gt >= obj.start_time && gt <= end_t ) {
+                        active_idx = m_last_active_idx;
+                    }
                 }
             }
 
             if ( active_idx < 0 ) {
+                int best_start = -1;
                 for ( size_t i = 0; i < map.objects.size( ); ++i ) {
-                    const auto& obj = map.objects[i];
-                    int end_t = get_movement_end_time( obj, map, static_cast<int>( i ) );
-                    if ( gt >= obj.start_time && gt <= end_t ) {
+                    const auto& obj = map.objects[ i ];
+                    if ( is_spinner_object( obj ) )
+                        continue;
+
+                    int next_start = obj.start_time + 500;
+                    if ( i + 1 < map.objects.size( ) )
+                        next_start = map.objects[ i + 1 ].start_time;
+
+                    const int hit_open = obj.start_time - 18;
+                    const int hit_close = obj.start_time + circle_hold_ms( obj.start_time, next_start ) + 12;
+                    if ( gt >= hit_open && gt <= hit_close && obj.start_time >= best_start ) {
                         active_idx = static_cast<int>( i );
-                        break;
+                        best_start = obj.start_time;
                     }
                 }
             }
@@ -255,15 +415,6 @@ namespace autobot {
 
             if ( active_idx >= 0 ) {
                 const auto& obj = map.objects[ static_cast<size_t>( active_idx ) ];
-                if ( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::spinner ) ) {
-                    const float radius = 70.f;
-                    float angle = static_cast<float>( gt ) * 0.062f;
-                    float raw_x = 256.f + std::cos( angle ) * radius;
-                    float raw_y = 192.f + std::sin( angle ) * radius;
-                    float wx = 0.f, wy = 0.f;
-                    playfield::project_osu_to_window( raw_x, raw_y, win_w, win_h, wx, wy, 0 );
-                    return { wx, wy };
-                }
                 if ( obj.type & static_cast<uint8_t>( osu::hit_object_type_t::slider ) ) {
                     point_t raw = evaluate_slider( obj, gt );
                     float wx = 0.f, wy = 0.f;
@@ -295,13 +446,14 @@ namespace autobot {
                 if ( prev_obj.type & static_cast<uint8_t>( osu::hit_object_type_t::slider ) ) {
                     start_raw = evaluate_slider( prev_obj, prev_end_t );
                 }
-                else if ( prev_obj.type & static_cast<uint8_t>( osu::hit_object_type_t::spinner ) ) {
-                    float angle = static_cast<float>( prev_end_t ) * 0.062f;
-                    start_raw = { 256.f + std::cos( angle ) * 70.f, 192.f + std::sin( angle ) * 70.f };
+                else if ( is_spinner_object( prev_obj ) ) {
+                    const float end_angle =
+                        static_cast<float>( prev_end_t - prev_obj.start_time ) * k_spinner_omega_rad_per_ms;
+                    start_raw = spinner_osu_at_angle( prev_obj, end_angle );
                 }
 
                 float start_wx = 0.f, start_wy = 0.f;
-                int prev_stack = ( prev_obj.type & static_cast<uint8_t>( osu::hit_object_type_t::spinner ) ) ? 0 : prev_obj.stack_index;
+                int prev_stack = is_spinner_object( prev_obj ) ? 0 : prev_obj.stack_index;
                 playfield::project_osu_to_window( start_raw.x, start_raw.y, win_w, win_h, start_wx, start_wy, prev_stack );
 
                 float end_wx = 0.f, end_wy = 0.f;

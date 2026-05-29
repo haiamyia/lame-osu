@@ -3,6 +3,7 @@
 #include <core/beatmap/i_beatmap_provider.hxx>
 #include <impl/memory/input.hxx>
 #include <impl/util/playfield.hxx>
+#include <impl/util/stacking.hxx>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -360,8 +361,18 @@ namespace beatmap {
                         }
                     }
                     else if ( type & static_cast<int>( osu::hit_object_type_t::spinner ) ) {
-                        if ( vars.size( ) >= 6 )
-                            obj.end_time = std::stoi( vars[ 5 ] );
+                        if ( vars.size( ) >= 6 ) {
+                            const int32_t val = std::stoi( vars[ 5 ] );
+                            if ( val > time + 100 )
+                                obj.end_time = val;
+                            else if ( val > 50 )
+                                obj.end_time = time + val;
+                            else
+                                obj.end_time = time + 3000;
+                        }
+                        else {
+                            obj.end_time = time + 3000;
+                        }
                     }
                     else {
                         obj.end_time = time + 100;
@@ -376,6 +387,11 @@ namespace beatmap {
                 []( const osu::hit_object_t& a, const osu::hit_object_t& b ) {
                     return a.start_time < b.start_time;
                 } );
+
+            apply_hitobject_stacking( out.objects );
+
+            for ( auto& obj : out.objects )
+                project_to_screen( obj, out.screen_width, out.screen_height );
 
             return !out.objects.empty( );
         }

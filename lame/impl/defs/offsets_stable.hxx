@@ -18,14 +18,6 @@ namespace offsets::stable {
     inline constexpr uint32_t beatmap_folder_name = 0x74;
     inline constexpr uint32_t beatmap_file_name = 0x94;
 
-    inline constexpr const char* pattern_left_key =
-        "FF FF FF FF 02 00 00 00 ? 00 00 00 03 00 00 00 FF";
-    inline constexpr int32_t pattern_left_key_offset = 8;
-
-    inline constexpr const char* pattern_right_key =
-        "FF FF FF FF 03 00 00 00 ? 00 00 00 04 00 00 00 FF FF FF FF";
-    inline constexpr int32_t pattern_right_key_offset = 8;
-
     inline constexpr const char* pattern_menu_mods = "81 0d ? ? ? ? 00 08 00 00 c7";
     inline constexpr int32_t pattern_menu_mods_offset = 2;
 

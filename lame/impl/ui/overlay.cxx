@@ -122,6 +122,8 @@ namespace {
 namespace ui {
 
     bool c_overlay::create( HINSTANCE instance ) {
+        ImGui_ImplWin32_EnableDpiAwareness( );
+
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof( wc );
         wc.style = CS_CLASSDC;
@@ -172,7 +174,8 @@ namespace ui {
 
         m_mouse_hook.set_filter_injected_only( true );
         m_mouse_hook.set_transform( overlay_aim_hook_transform, this );
-        m_mouse_hook.install( );
+        const bool hook_ok = m_mouse_hook.install( );
+        m_aim.set_hook_drive( hook_ok );
 
         return true;
     }
@@ -372,15 +375,134 @@ namespace ui {
         m_swap_chain->Present( 0, 0 );
     }
 
+    void c_overlay::apply_custom_keys( osu::game_snapshot_t& game ) const {
+        game.left_key = m_custom_left_key;
+        game.right_key = m_custom_right_key;
+    }
+
+    config::settings_t c_overlay::capture_settings( ) const {
+        config::settings_t s{};
+        s.aim_enabled = m_aim.enabled;
+        s.aim_ignore_sliders = m_aim.ignore_sliders;
+        s.aim_legit_mode = m_aim.legit_mode;
+        s.aim_use_hitbox = m_aim.use_hitbox;
+        s.aim_tablet_mode = m_aim.tablet_mode;
+        s.aim_strength = m_aim.strength;
+        s.aim_timing_ms = m_aim.timing_ms;
+        s.aim_cone_deg = m_aim.aim_cone_deg;
+        s.aim_idle_threshold_px = m_aim.idle_threshold_px;
+        s.aim_blend_early = m_aim.blend_early;
+        s.aim_blend_late = m_aim.blend_late;
+        s.aim_return_rate = m_aim.return_rate;
+        s.aim_stick_rate = m_aim.stick_rate;
+        s.aim_pre_pull = m_aim.pre_pull;
+
+        s.relax_enabled = m_relax.enabled;
+        s.relax_hit_window_ms = m_relax.hit_window_ms;
+        s.relax_tap_style = m_relax.tap_style;
+        s.relax_singletap_bpm_cap = m_relax.singletap_bpm_cap;
+        s.relax_k1_hold_center = m_relax.k1_hold_center;
+        s.relax_k1_hold_spread = m_relax.k1_hold_spread;
+        s.relax_k2_hold_center = m_relax.k2_hold_center;
+        s.relax_k2_hold_spread = m_relax.k2_hold_spread;
+        s.relax_hold_floor = m_relax.hold_floor;
+        s.relax_hold_ceiling = m_relax.hold_ceiling;
+        s.relax_manual_offset_ms = m_relax.manual_offset_ms;
+
+        s.replay_enabled = m_replay.enabled;
+        s.replay_path_utf8 = m_replay_path_utf8;
+        s.replay_speed_multiplier = m_replay.speed_multiplier;
+        s.replay_time_offset_ms = m_replay.time_offset_ms;
+        s.replay_flip = m_replay.flip_replay;
+        s.replay_disable_aim = m_replay.disable_aim;
+        s.replay_disable_clicking = m_replay.disable_clicking;
+        s.replay_y_offset = m_replay.y_playfield_offset;
+
+        s.autobot_enabled = m_autobot.enabled;
+
+        s.custom_left_key = m_custom_left_key;
+        s.custom_right_key = m_custom_right_key;
+        s.stream_proof = stream_proof;
+        s.score_blocker = score_blocker;
+        s.songs_path_utf8 = m_songs_path_utf8;
+        return s;
+    }
+
+    void c_overlay::apply_settings( const config::settings_t& s ) {
+        m_aim.enabled = s.aim_enabled;
+        m_aim.ignore_sliders = s.aim_ignore_sliders;
+        m_aim.legit_mode = s.aim_legit_mode;
+        m_aim.use_hitbox = s.aim_use_hitbox;
+        m_aim.tablet_mode = s.aim_tablet_mode;
+        m_aim.strength = s.aim_strength;
+        m_aim.timing_ms = s.aim_timing_ms;
+        m_aim.aim_cone_deg = s.aim_cone_deg;
+        m_aim.idle_threshold_px = s.aim_idle_threshold_px;
+        m_aim.blend_early = s.aim_blend_early;
+        m_aim.blend_late = s.aim_blend_late;
+        m_aim.return_rate = s.aim_return_rate;
+        m_aim.stick_rate = s.aim_stick_rate;
+        m_aim.pre_pull = s.aim_pre_pull;
+
+        m_relax.enabled = s.relax_enabled;
+        m_relax.hit_window_ms = s.relax_hit_window_ms;
+        m_relax.tap_style = s.relax_tap_style;
+        m_relax.singletap_bpm_cap = s.relax_singletap_bpm_cap;
+        m_relax.k1_hold_center = s.relax_k1_hold_center;
+        m_relax.k1_hold_spread = s.relax_k1_hold_spread;
+        m_relax.k2_hold_center = s.relax_k2_hold_center;
+        m_relax.k2_hold_spread = s.relax_k2_hold_spread;
+        m_relax.hold_floor = s.relax_hold_floor;
+        m_relax.hold_ceiling = s.relax_hold_ceiling;
+        m_relax.manual_offset_ms = s.relax_manual_offset_ms;
+
+        m_replay.enabled = s.replay_enabled;
+        if ( !s.replay_path_utf8.empty( ) ) {
+            strncpy_s( m_replay_path_utf8, s.replay_path_utf8.c_str( ), _TRUNCATE );
+            int wlen = MultiByteToWideChar( CP_UTF8, 0, m_replay_path_utf8, -1, nullptr, 0 );
+            if ( wlen > 1 ) {
+                std::wstring wide( static_cast<size_t>( wlen - 1 ), L'\0' );
+                MultiByteToWideChar( CP_UTF8, 0, m_replay_path_utf8, -1, wide.data( ), wlen );
+                m_replay.replay_path = wide;
+                m_replay.load_replay( );
+                m_replay.reset_sync( );
+            }
+        }
+
+        m_replay.speed_multiplier = s.replay_speed_multiplier;
+        m_replay.time_offset_ms = s.replay_time_offset_ms;
+        m_replay.flip_replay = s.replay_flip;
+        m_replay.disable_aim = s.replay_disable_aim;
+        m_replay.disable_clicking = s.replay_disable_clicking;
+        m_replay.y_playfield_offset = s.replay_y_offset;
+
+        m_autobot.enabled = s.autobot_enabled;
+
+        m_custom_left_key = s.custom_left_key;
+        m_custom_right_key = s.custom_right_key;
+        stream_proof = s.stream_proof;
+        score_blocker = s.score_blocker;
+
+        if ( !s.songs_path_utf8.empty( ) ) {
+            strncpy_s( m_songs_path_utf8, s.songs_path_utf8.c_str( ), _TRUNCATE );
+            if ( m_cache ) {
+                wchar_t wide[ 512 ]{};
+                MultiByteToWideChar( CP_UTF8, 0, m_songs_path_utf8, -1, wide, 512 );
+                m_cache->stable_parser( ).set_songs_path( wide );
+                m_cache->invalidate_beatmap_cache( );
+            }
+        }
+
+        if ( m_cache && score_blocker )
+            set_score_blocker_state( score_blocker, m_cache->process_handle( ) );
+    }
+
     void c_overlay::reset_modules( const osu::game_snapshot_t& game ) {
         m_game_time_stall_start_ms = 0;
         m_aim.set_user_input_blocked( false );
         m_aim.on_leave_play( );
         osu::game_snapshot_t mod_game = game;
-        if ( mod_game.client == osu::client_kind_t::lazer ) {
-            mod_game.left_key = m_custom_left_key;
-            mod_game.right_key = m_custom_right_key;
-        }
+        apply_custom_keys( mod_game );
         m_relax.on_leave_play( mod_game );
         m_replay.on_leave_play( mod_game );
         m_autobot.on_leave_play( mod_game );
@@ -417,10 +539,7 @@ namespace ui {
 
         if ( in_play && snap.beatmap.loaded && !snap.beatmap.objects.empty( ) ) {
             osu::full_snapshot_t mod_snap = snap;
-            if ( mod_snap.game.client == osu::client_kind_t::lazer ) {
-                mod_snap.game.left_key = m_custom_left_key;
-                mod_snap.game.right_key = m_custom_right_key;
-            }
+            apply_custom_keys( mod_snap.game );
 
             constexpr uint64_t k_pause_stall_ms = 120;
             const uint64_t     now_ms = ::GetTickCount64( );
@@ -536,7 +655,7 @@ namespace ui {
         }
 
         {
-            static const char* tab_names[ ] = { "Aimbot", "Relax", "Replay", "Autobot", "System" };
+            static const char* tab_names[ ] = { "Aimbot", "Relax", "Replay", "Autobot", "System", "Config" };
             const float tab_start_y = wpos.y + 80.0f;
             const float tab_h = 36.0f;
             const float tab_gap = 10.0f;
@@ -544,7 +663,7 @@ namespace ui {
             const ImVec2 mouse = ImGui::GetIO( ).MousePos;
             const bool mouse_clicked = ImGui::IsMouseClicked( ImGuiMouseButton_Left );
 
-            for ( int i = 0; i < 5; i++ ) {
+            for ( int i = 0; i < 6; i++ ) {
                 const ImVec2 btn_min = ImVec2( wpos.x + 12.0f, tab_start_y + static_cast<float>( i ) * ( tab_h + tab_gap ) );
                 const ImVec2 btn_max = ImVec2( btn_min.x + ( SIDEBAR_W - 24.0f ), btn_min.y + tab_h );
 
@@ -915,6 +1034,120 @@ namespace ui {
             draw_card( dl, wpos, R_X, rbox_top, rbox_bottom, R_W, "diagnostics", colors::col_hdr );
             dl->ChannelsMerge( );
         }
+        else if ( m_tab == 5 ) {
+            if ( m_config_profiles.empty( ) )
+                m_config_profiles = config::list_profiles( );
+
+            const float lbox_top = TITLE_H + 12.0f;
+            float ly = lbox_top + 28.0f;
+
+            dl->ChannelsSplit( 2 );
+            dl->ChannelsSetCurrent( 1 );
+
+            dl->AddText( S( L_X + 12.0f, ly ), colors::text_bright, "Config name:" );
+            ly += ImGui::GetTextLineHeight( ) + 6.0f;
+
+            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
+            text_input( "##cfg_name", m_config_name_utf8, IM_ARRAYSIZE( m_config_name_utf8 ), L_W - 20.0f );
+            ly = ImGui::GetCursorPos( ).y + 8.0f;
+
+            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
+            if ( button( "Save", ( L_W - 30.0f ) * 0.5f, 22.0f ) ) {
+                const std::string name = config::sanitize_name( m_config_name_utf8 );
+                if ( name.empty( ) ) {
+                    m_config_status = "Enter a config name first.";
+                }
+                else if ( config::save_profile( name, capture_settings( ) ) ) {
+                    m_config_status = "Saved \"" + name + "\".";
+                    m_config_profiles = config::list_profiles( );
+                    strncpy_s( m_config_name_utf8, name.c_str( ), _TRUNCATE );
+                }
+                else {
+                    m_config_status = "Failed to save config.";
+                }
+            }
+
+            ImGui::SetCursorPos( ImVec2( L_X + 15.0f + ( L_W - 30.0f ) * 0.5f, ly ) );
+            if ( button( "Refresh list", ( L_W - 30.0f ) * 0.5f, 22.0f ) ) {
+                m_config_profiles = config::list_profiles( );
+                m_config_status = "Profile list refreshed.";
+            }
+            ly = ImGui::GetCursorPos( ).y + 10.0f;
+
+            dl->AddText( S( L_X + 12.0f, ly ), colors::text_bright, "Saved configs:" );
+            ly += ImGui::GetTextLineHeight( ) + 6.0f;
+
+            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
+            const float list_h = MENU_H - ly - 80.0f;
+            if ( ImGui::BeginListBox( "##cfg_list", ImVec2( L_W - 20.0f, list_h ) ) ) {
+                for ( int i = 0; i < static_cast<int>( m_config_profiles.size( ) ); ++i ) {
+                    const bool selected = ( m_config_selected == i );
+                    if ( ImGui::Selectable( m_config_profiles[ static_cast<size_t>( i ) ].c_str( ), selected ) ) {
+                        m_config_selected = i;
+                        strncpy_s(
+                            m_config_name_utf8,
+                            m_config_profiles[ static_cast<size_t>( i ) ].c_str( ),
+                            _TRUNCATE );
+                    }
+                }
+                ImGui::EndListBox( );
+            }
+            ly = ImGui::GetCursorPos( ).y + 8.0f;
+
+            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
+            if ( button( "Load", L_W - 20.0f, 24.0f ) ) {
+                std::string name = config::sanitize_name( m_config_name_utf8 );
+                if ( name.empty( ) && m_config_selected >= 0 &&
+                     m_config_selected < static_cast<int>( m_config_profiles.size( ) ) )
+                    name = m_config_profiles[ static_cast<size_t>( m_config_selected ) ];
+
+                config::settings_t loaded{};
+                if ( name.empty( ) ) {
+                    m_config_status = "Select or enter a config name.";
+                }
+                else if ( config::load_profile( name, loaded ) ) {
+                    apply_settings( loaded );
+                    strncpy_s( m_config_name_utf8, name.c_str( ), _TRUNCATE );
+                    m_config_status = "Loaded \"" + name + "\".";
+                }
+                else {
+                    m_config_status = "Config not found.";
+                }
+            }
+            ly = ImGui::GetCursorPos( ).y + 6.0f;
+
+            if ( !m_config_status.empty( ) ) {
+                dl->AddText( S( L_X + 12.0f, ly ), colors::text_dim, m_config_status.c_str( ) );
+                ly += ImGui::GetTextLineHeight( ) + 4.0f;
+            }
+
+            const float lbox_bottom = ly + 10.0f;
+            dl->ChannelsSetCurrent( 0 );
+            draw_card( dl, wpos, L_X, lbox_top, lbox_bottom, L_W, "profiles", colors::col_hdr );
+            dl->ChannelsMerge( );
+
+            const float rbox_top = TITLE_H + 12.0f;
+            float ry = rbox_top + 28.0f;
+            dl->ChannelsSetCurrent( 1 );
+
+            dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "Saves all module settings," );
+            ry += ImGui::GetTextLineHeight( ) + 2.0f;
+            dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "keys, replay path, and system options." );
+            ry += ImGui::GetTextLineHeight( ) + 8.0f;
+
+            char path_buf[ 512 ]{};
+            WideCharToMultiByte(
+                CP_UTF8, 0, config::configs_dir( ).wstring( ).c_str( ), -1, path_buf, sizeof( path_buf ), nullptr, nullptr );
+            dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "Folder:" );
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
+            dl->AddText( S( R_X + 12.0f, ry ), colors::text, path_buf );
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
+
+            const float rbox_bottom = ry + 10.0f;
+            dl->ChannelsSetCurrent( 0 );
+            draw_card( dl, wpos, R_X, rbox_top, rbox_bottom, R_W, "config files", colors::col_hdr );
+            dl->ChannelsMerge( );
+        }
         else if ( m_tab == 4 ) {
             const float lbox_top = TITLE_H + 12.0f;
             float ly = lbox_top + 28.0f;
@@ -922,7 +1155,7 @@ namespace ui {
             dl->ChannelsSplit( 2 );
             dl->ChannelsSetCurrent( 1 );
 
-            dl->AddText( S( L_X + 12.0f, ly ), colors::text_bright, "Custom Gameplay Keys:" );
+            dl->AddText( S( L_X + 12.0f, ly ), colors::text_bright, "K1 / K2 (stable & lazer):" );
             ly += ImGui::GetTextLineHeight( ) + 8.0f;
 
             char left_buf[ 16 ]{};
@@ -956,6 +1189,11 @@ namespace ui {
                     if ( GetAsyncKeyState( k ) & 0x8000 ) {
                         m_custom_left_key = k;
                         m_waiting_left = false;
+                        if ( m_relax.is_active( ) ) {
+                            osu::game_snapshot_t mod = snap.game;
+                            apply_custom_keys( mod );
+                            m_relax.on_leave_play( mod );
+                        }
                         break;
                     }
                 }
@@ -980,6 +1218,11 @@ namespace ui {
                     if ( GetAsyncKeyState( k ) & 0x8000 ) {
                         m_custom_right_key = k;
                         m_waiting_right = false;
+                        if ( m_relax.is_active( ) ) {
+                            osu::game_snapshot_t mod = snap.game;
+                            apply_custom_keys( mod );
+                            m_relax.on_leave_play( mod );
+                        }
                         break;
                     }
                 }
@@ -1047,7 +1290,19 @@ namespace ui {
                 sprintf_s( buf, "Time: --" );
             }
             dl->AddText( S( R_X + 12.0f, ry ), colors::text, buf );
-            ry += ImGui::GetTextLineHeight( ) + 8.0f;
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
+
+            sprintf_s(
+                buf, "Aim mouse hook: %s", m_mouse_hook.installed( ) ? "active" : "failed (poll fallback)" );
+            dl->AddText(
+                S( R_X + 12.0f, ry ),
+                m_mouse_hook.installed( ) ? IM_COL32( 100, 255, 100, 255 ) : IM_COL32( 255, 200, 100, 255 ),
+                buf );
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
+
+            sprintf_s( buf, "Mouse input: %s", input::using_nt_input( ) ? "win32u" : "SendInput" );
+            dl->AddText( S( R_X + 12.0f, ry ), colors::text, buf );
+            ry += ImGui::GetTextLineHeight( ) + 4.0f;
 
             if ( snap.game.client == osu::client_kind_t::stable ) {
                 dl->AddText( S( R_X + 12.0f, ry ), colors::text_dim, "Songs path override:" );
@@ -1077,6 +1332,7 @@ namespace ui {
                     wchar_t wide[ 512 ]{};
                     MultiByteToWideChar( CP_UTF8, 0, m_songs_path_utf8, -1, wide, 512 );
                     m_cache->stable_parser( ).set_songs_path( wide );
+                    m_cache->invalidate_beatmap_cache( );
                 }
                 ry = ImGui::GetCursorPos( ).y;
             }

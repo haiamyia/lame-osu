@@ -13,6 +13,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdint>
+#include <climits>
 #include <atomic>
 #include <mutex>
 #include <optional>
@@ -25,10 +26,11 @@ namespace aim_assist {
         bool  ignore_sliders  = false;
         bool  legit_mode      = true;
         bool  use_hitbox      = true;
-        bool  tablet_mode     = true;
+        bool  tablet_mode = false;
 
-        float strength          = 6.f;
-        int   timing_ms         = 100;
+        float strength          = 6.5f;
+        int   timing_ms         = 120;
+        int   timing_cap_ms     = 320;
         float aim_cone_deg      = 60.f;
         float idle_threshold_px = 2.f;
         float blend_early       = 0.15f;
@@ -49,6 +51,14 @@ namespace aim_assist {
             const bool was = m_user_blocked.exchange( blocked );
             if ( blocked && !was )
                 clear_motion_state( );
+        }
+
+        void set_hook_drive( bool hook_active ) {
+            m_hook_drive.store( hook_active );
+        }
+
+        [[nodiscard]] bool hook_drive( ) const {
+            return m_hook_drive.load( );
         }
 
         void update( const osu::game_snapshot_t& game, const osu::beatmap_data_t& map ) {
@@ -79,6 +89,12 @@ namespace aim_assist {
 
             const int win_w = window.right - window.left;
             const int win_h = window.bottom - window.top;
+
+            if ( window.left != m_last_window_left || window.top != m_last_window_top ) {
+                m_last_window_left = window.left;
+                m_last_window_top = window.top;
+                input::invalidate_virtual_desktop( );
+            }
 
             aim_target_t next{};
             next.cur_time_ms = game.cur_time;
@@ -117,6 +133,11 @@ namespace aim_assist {
 
             smooth_target( next );
 
+            m_effective_timing_ms = timing_ms;
+            if ( next.valid && best_tl != INT32_MAX && best_tl > 0 ) {
+                m_effective_timing_ms = std::max( timing_ms, std::min( best_tl + 40, timing_cap_ms ) );
+            }
+
             {
                 std::lock_guard<std::mutex> lock( m_target_mutex );
                 m_target = next;
@@ -134,15 +155,14 @@ namespace aim_assist {
         }
 
     private:
-        static constexpr float k_hook_offset_cap_px     = 9.f;
-        static constexpr float k_fallback_offset_cap_px = 14.f;
-        static constexpr float k_target_step_px         = 14.f;
-        static constexpr float k_target_snap_px         = 80.f;
-        static constexpr uint64_t k_min_hook_apply_ms   = 2;
-        static constexpr uint64_t k_fallback_apply_ms   = 8;
+        static constexpr float k_target_step_px = 18.f;
+        static constexpr uint64_t k_min_hook_apply_ms        = 2;
+        static constexpr uint64_t k_fallback_apply_ms        = 16;
+        static constexpr uint64_t k_fallback_poll_only_ms    = 6;
 
         std::atomic<bool>     m_in_play{ false };
         std::atomic<bool>     m_user_blocked{ false };
+        std::atomic<bool>     m_hook_drive{ true };
         std::atomic<uint64_t> m_last_apply_ms{ 0 };
         bool                 m_hand_valid = false;
         float                m_hand_x = 0.f;
@@ -150,8 +170,9 @@ namespace aim_assist {
         bool                 m_smooth_target_valid = false;
         float                m_smooth_target_x = 0.f;
         float                m_smooth_target_y = 0.f;
-        float                m_apply_remainder_x = 0.f;
-        float                m_apply_remainder_y = 0.f;
+        int                  m_last_window_left = INT32_MIN;
+        int                  m_last_window_top = INT32_MIN;
+        int                  m_effective_timing_ms = 100;
         std::mutex           m_target_mutex;
         std::mutex           m_apply_mutex;
         aim_target_t         m_target{};
@@ -161,8 +182,8 @@ namespace aim_assist {
         void clear_motion_state( ) {
             m_hand_valid = false;
             m_smooth_target_valid = false;
-            m_apply_remainder_x = 0.f;
-            m_apply_remainder_y = 0.f;
+            m_last_window_left = INT32_MIN;
+            m_last_window_top = INT32_MIN;
             m_state = {};
         }
 
@@ -172,7 +193,7 @@ namespace aim_assist {
             cfg.legit_mode = legit_mode;
             cfg.use_hitbox = use_hitbox;
             cfg.strength = std::clamp( strength / 12.f, 0.f, 1.f );
-            cfg.timing_ms = timing_ms;
+            cfg.timing_ms = m_effective_timing_ms;
             cfg.aim_cone_deg = aim_cone_deg;
             cfg.idle_threshold_px = idle_threshold_px;
             cfg.blend_early = blend_early;
@@ -198,17 +219,11 @@ namespace aim_assist {
                 float dx = target.x - m_smooth_target_x;
                 float dy = target.y - m_smooth_target_y;
                 const float dist = std::sqrt( dx * dx + dy * dy );
-                if ( dist > k_target_snap_px ) {
-                    m_smooth_target_x = target.x;
-                    m_smooth_target_y = target.y;
-                }
-                else {
-                    float t = 1.f;
-                    if ( dist > k_target_step_px )
-                        t = k_target_step_px / dist;
-                    m_smooth_target_x += dx * t;
-                    m_smooth_target_y += dy * t;
-                }
+                float t = 1.f;
+                if ( dist > k_target_step_px )
+                    t = k_target_step_px / dist;
+                m_smooth_target_x += dx * t;
+                m_smooth_target_y += dy * t;
             }
 
             target.x = m_smooth_target_x;
@@ -219,6 +234,14 @@ namespace aim_assist {
             if ( !enabled || !m_in_play.load( ) )
                 return;
 
+            if ( !from_hook ) {
+                POINT cur{};
+                if ( input::get_cursor_pos( &cur ) ) {
+                    raw_x = static_cast<float>( cur.x ) - m_state.offset_x;
+                    raw_y = static_cast<float>( cur.y ) - m_state.offset_y;
+                }
+            }
+
             const uint64_t now = GetTickCount64( );
             if ( from_hook ) {
                 if ( now - m_last_apply_ms.load( ) < k_min_hook_apply_ms )
@@ -227,8 +250,7 @@ namespace aim_assist {
 
             m_last_apply_ms.store( now );
 
-            const float cap = from_hook ? k_hook_offset_cap_px : k_fallback_offset_cap_px;
-            try_apply_move( raw_x, raw_y, cap, from_hook );
+            try_apply_move( raw_x, raw_y, from_hook );
         }
 
         void apply_fallback_tick( ) {
@@ -236,7 +258,9 @@ namespace aim_assist {
                 return;
 
             const uint64_t now = GetTickCount64( );
-            if ( now - m_last_apply_ms.load( ) < k_fallback_apply_ms )
+            const uint64_t interval =
+                m_hook_drive.load( ) ? k_fallback_apply_ms : k_fallback_poll_only_ms;
+            if ( now - m_last_apply_ms.load( ) < interval )
                 return;
 
             POINT cur{};
@@ -246,7 +270,7 @@ namespace aim_assist {
             apply_on_input( static_cast<float>( cur.x ), static_cast<float>( cur.y ), false );
         }
 
-        void try_apply_move( float raw_x, float raw_y, float cap_px, bool fixed_dt ) {
+        void try_apply_move( float raw_x, float raw_y, bool fixed_dt ) {
             std::lock_guard<std::mutex> lock( m_apply_mutex );
 
             if ( !tablet_mode ) {
@@ -264,42 +288,30 @@ namespace aim_assist {
             if ( fixed_dt )
                 m_state.last_tick_ms = GetTickCount64( ) - static_cast<uint64_t>( k_dt_norm_ms );
 
-            const float prev_offset_x = m_state.offset_x;
-            const float prev_offset_y = m_state.offset_y;
-
             float out_x = 0.f;
             float out_y = 0.f;
             if ( !apply( raw_x, raw_y, target, build_config( ), m_state, &out_x, &out_y ) )
                 return;
 
-            apply_offset_delta( prev_offset_x, prev_offset_y, cap_px );
+            apply_assist_cursor( raw_x, raw_y );
         }
 
-        void apply_offset_delta( float prev_offset_x, float prev_offset_y, float cap_px ) {
-            float assist_dx = m_state.offset_x - prev_offset_x;
-            float assist_dy = m_state.offset_y - prev_offset_y;
+        void apply_assist_cursor( float raw_x, float raw_y ) {
+            const float tx = raw_x + m_state.offset_x;
+            const float ty = raw_y + m_state.offset_y;
 
-            if ( legit_mode && ( assist_dx * assist_dx + assist_dy * assist_dy ) < 0.04f )
-                return;
-
-            const float assist_len = std::sqrt( assist_dx * assist_dx + assist_dy * assist_dy );
-            if ( assist_len > cap_px && assist_len > 0.001f ) {
-                const float s = cap_px / assist_len;
-                assist_dx *= s;
-                assist_dy *= s;
+            if ( legit_mode ) {
+                const float dx = tx - raw_x;
+                const float dy = ty - raw_y;
+                if ( dx * dx + dy * dy < 0.04f )
+                    return;
             }
 
-            m_apply_remainder_x += assist_dx;
-            m_apply_remainder_y += assist_dy;
+            const int sx = static_cast<int>( std::lround( tx ) );
+            const int sy = static_cast<int>( std::lround( ty ) );
 
-            const int dx = static_cast<int>( std::lround( m_apply_remainder_x ) );
-            const int dy = static_cast<int>( std::lround( m_apply_remainder_y ) );
-            if ( dx == 0 && dy == 0 )
-                return;
-
-            m_apply_remainder_x -= static_cast<float>( dx );
-            m_apply_remainder_y -= static_cast<float>( dy );
-            input::move_relative( dx, dy );
+            if ( !input::set_cursor_pos( sx, sy ) )
+                input::move_absolute_virtual_desktop( sx, sy );
         }
 
         static float hit_radius_screen( float cs, int win_w, int win_h ) {
