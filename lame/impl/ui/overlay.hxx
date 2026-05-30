@@ -49,7 +49,6 @@ namespace ui {
         autobot::c_autobot& auto_bot( ) { return m_autobot; }
 
         bool stream_proof = false;
-        bool score_blocker = false;
 
         static constexpr int MENU_W = 700;
         static constexpr int MENU_H = 420;

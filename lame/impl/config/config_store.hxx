@@ -54,7 +54,6 @@ namespace config {
         int custom_left_key = 'Z';
         int custom_right_key = 'X';
         bool stream_proof = false;
-        bool score_blocker = false;
         std::string songs_path_utf8;
     };
 
@@ -193,7 +192,6 @@ namespace config {
         write_line( out, "keys.left", s.custom_left_key );
         write_line( out, "keys.right", s.custom_right_key );
         write_line( out, "system.stream_proof", s.stream_proof );
-        write_line( out, "system.score_blocker", s.score_blocker );
         write_line( out, "system.songs_path", s.songs_path_utf8 );
         return true;
     }
@@ -317,8 +315,6 @@ namespace config {
                 parse_int( s.custom_right_key );
             else if ( key == "system.stream_proof" )
                 parse_bool( val, s.stream_proof );
-            else if ( key == "system.score_blocker" )
-                parse_bool( val, s.score_blocker );
             else if ( key == "system.songs_path" )
                 s.songs_path_utf8 = val;
         }

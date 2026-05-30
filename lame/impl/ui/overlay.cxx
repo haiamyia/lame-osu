@@ -19,8 +19,6 @@
 #pragma comment( lib, "dwmapi.lib" )
 #pragma comment( lib, "shell32.lib" )
 #pragma comment( lib, "ole32.lib" )
-#pragma comment( lib, "ws2_32.lib" )
-
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
 
 namespace {
@@ -38,83 +36,6 @@ namespace {
 
         *out = *adjusted;
         return true;
-    }
-
-    void remove_score_blocker_rule( ) {
-        std::wstring del_cmd = L"cmd.exe /c netsh advfirewall firewall delete rule name=\"lame_score_block\"";
-        STARTUPINFOW si{};
-        si.cb = sizeof( si );
-        si.dwFlags = STARTF_USESHOWWINDOW;
-        si.wShowWindow = SW_HIDE;
-        PROCESS_INFORMATION pi{};
-        if ( CreateProcessW( nullptr, const_cast<LPWSTR>( del_cmd.c_str( ) ), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi ) ) {
-            WaitForSingleObject( pi.hProcess, INFINITE );
-            CloseHandle( pi.hProcess );
-            CloseHandle( pi.hThread );
-        }
-    }
-
-    std::vector<std::wstring> resolve_host_ips( const std::wstring& host ) {
-        std::vector<std::wstring> ips;
-        WSADATA wsa_data;
-        if ( WSAStartup( MAKEWORD( 2, 2 ), &wsa_data ) != 0 ) {
-            return ips;
-        }
-
-        ADDRINFOW hints{};
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        
-        ADDRINFOW* result = nullptr;
-        if ( GetAddrInfoW( host.c_str( ), nullptr, &hints, &result ) == 0 ) {
-            ADDRINFOW* ptr = result;
-            while ( ptr != nullptr ) {
-                if ( ptr->ai_family == AF_INET ) {
-                    auto* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>( ptr->ai_addr );
-                    wchar_t ip_str[46]{};
-                    if ( InetNtopW( AF_INET, &sockaddr_ipv4->sin_addr, ip_str, 46 ) ) {
-                        if ( std::find( ips.begin( ), ips.end( ), ip_str ) == ips.end( ) ) {
-                            ips.push_back( ip_str );
-                        }
-                    }
-                }
-                ptr = ptr->ai_next;
-            }
-            FreeAddrInfoW( result );
-        }
-        WSACleanup( );
-        return ips;
-    }
-
-    void set_score_blocker_state( bool enabled, HANDLE process_handle ) {
-        remove_score_blocker_rule( );
-
-        if ( enabled && process_handle ) {
-            wchar_t path[MAX_PATH]{};
-            DWORD size = MAX_PATH;
-            if ( QueryFullProcessImageNameW( process_handle, 0, path, &size ) ) {
-                auto ips = resolve_host_ips( L"osu.ppy.sh" );
-                if ( !ips.empty( ) ) {
-                    std::wstring ip_list;
-                    for ( size_t i = 0; i < ips.size( ); ++i ) {
-                        if ( i > 0 ) ip_list += L",";
-                        ip_list += ips[i];
-                    }
-                    
-                    std::wstring add_cmd = L"cmd.exe /c netsh advfirewall firewall add rule name=\"lame_score_block\" dir=out action=block program=\"" + std::wstring( path ) + L"\" remoteip=\"" + ip_list + L"\" enable=yes";
-                    STARTUPINFOW si{};
-                    si.cb = sizeof( si );
-                    si.dwFlags = STARTF_USESHOWWINDOW;
-                    si.wShowWindow = SW_HIDE;
-                    PROCESS_INFORMATION pi{};
-                    if ( CreateProcessW( nullptr, const_cast<LPWSTR>( add_cmd.c_str( ) ), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi ) ) {
-                        WaitForSingleObject( pi.hProcess, INFINITE );
-                        CloseHandle( pi.hProcess );
-                        CloseHandle( pi.hThread );
-                    }
-                }
-            }
-        }
     }
 
 }
@@ -182,7 +103,6 @@ namespace ui {
 
     void c_overlay::destroy( ) {
         m_mouse_hook.uninstall( );
-        remove_score_blocker_rule( );
 
         ImGui_ImplDX11_Shutdown( );
         ImGui_ImplWin32_Shutdown( );
@@ -423,7 +343,6 @@ namespace ui {
         s.custom_left_key = m_custom_left_key;
         s.custom_right_key = m_custom_right_key;
         s.stream_proof = stream_proof;
-        s.score_blocker = score_blocker;
         s.songs_path_utf8 = m_songs_path_utf8;
         return s;
     }
@@ -481,7 +400,6 @@ namespace ui {
         m_custom_left_key = s.custom_left_key;
         m_custom_right_key = s.custom_right_key;
         stream_proof = s.stream_proof;
-        score_blocker = s.score_blocker;
 
         if ( !s.songs_path_utf8.empty( ) ) {
             strncpy_s( m_songs_path_utf8, s.songs_path_utf8.c_str( ), _TRUNCATE );
@@ -492,9 +410,6 @@ namespace ui {
                 m_cache->invalidate_beatmap_cache( );
             }
         }
-
-        if ( m_cache && score_blocker )
-            set_score_blocker_state( score_blocker, m_cache->process_handle( ) );
     }
 
     void c_overlay::reset_modules( const osu::game_snapshot_t& game ) {
@@ -1240,14 +1155,6 @@ namespace ui {
             ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
             checkbox( "Stream proof", &stream_proof );
             ly = ImGui::GetCursorPos( ).y + 4.0f;
-
-            ImGui::SetCursorPos( ImVec2( L_X + 10.0f, ly ) );
-            if ( checkbox( "Block scores", &score_blocker ) ) {
-                if ( m_cache ) {
-                    set_score_blocker_state( score_blocker, m_cache->process_handle( ) );
-                }
-            }
-            ly = ImGui::GetCursorPos( ).y;
 
             const float lbox_bottom = ly + 10.0f;
             dl->ChannelsSetCurrent( 0 );
